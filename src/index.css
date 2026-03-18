@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 140 10% 97%;
+    --foreground: 200 25% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 200 25% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 25% 10%;
+    --primary: 152 55% 28%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 80% 55%;
+    --secondary-foreground: 200 25% 10%;
+    --muted: 140 10% 93%;
+    --muted-foreground: 200 10% 45%;
+    --accent: 152 30% 90%;
+    --accent-foreground: 152 55% 22%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 140 10% 88%;
+    --input: 140 10% 88%;
+    --ring: 152 55% 28%;
+    --radius: 0.625rem;
+
+    /* Custom tokens */
+    --eco-green: 152 55% 28%;
+    --eco-green-light: 152 40% 92%;
+    --eco-amber: 38 92% 50%;
+    --eco-amber-light: 38 90% 92%;
+    --eco-red: 0 72% 50%;
+    --eco-red-light: 0 70% 94%;
+    --eco-emerald: 160 60% 40%;
+    --eco-forest: 152 60% 18%;
+    --eco-leaf: 120 40% 55%;
+    --eco-sky: 200 80% 55%;
+    --eco-sky-light: 200 80% 94%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(152, 55%, 28%), hsl(160, 60%, 40%));
+    --gradient-hero: linear-gradient(135deg, hsl(152, 60%, 18%), hsl(152, 55%, 28%), hsl(160, 60%, 35%));
+    --gradient-amber: linear-gradient(135deg, hsl(38, 92%, 50%), hsl(30, 90%, 55%));
+
+    --shadow-card: 0 1px 3px hsl(152 20% 20% / 0.06), 0 1px 2px hsl(152 20% 20% / 0.04);
+    --shadow-elevated: 0 4px 16px hsl(152 20% 20% / 0.08), 0 2px 4px hsl(152 20% 20% / 0.04);
+
+    --sidebar-background: 152 60% 18%;
+    --sidebar-foreground: 140 20% 92%;
+    --sidebar-primary: 152 55% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 40% 24%;
+    --sidebar-accent-foreground: 140 20% 92%;
+    --sidebar-border: 152 40% 25%;
+    --sidebar-ring: 152 55% 45%;
+  }
+
+  .dark {
+    --background: 200 25% 8%;
+    --foreground: 140 10% 95%;
+    --card: 200 25% 12%;
+    --card-foreground: 140 10% 95%;
+    --popover: 200 25% 12%;
+    --popover-foreground: 140 10% 95%;
+    --primary: 152 55% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 45 70% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 200 25% 18%;
+    --muted-foreground: 140 5% 70%;
+    --accent: 152 30% 20%;
+    --accent-foreground: 140 10% 95%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 25% 20%;
+    --input: 200 25% 20%;
+    --ring: 152 55% 45%;
+
+    /* Dark mode custom tokens */
+    --eco-green: 152 55% 45%;
+    --eco-green-light: 152 40% 25%;
+    --eco-amber: 38 92% 55%;
+    --eco-amber-light: 38 90% 25%;
+    --eco-red: 0 72% 55%;
+    --eco-red-light: 0 70% 25%;
+    --eco-emerald: 160 60% 45%;
+    --eco-forest: 152 60% 25%;
+    --eco-leaf: 120 40% 60%;
+    --eco-sky: 200 80% 60%;
+    --eco-sky-light: 200 80% 25%;
+
+    --shadow-card: 0 1px 3px hsl(0 0% 0% / 0.3), 0 1px 2px hsl(0 0% 0% / 0.2);
+    --shadow-elevated: 0 4px 16px hsl(0 0% 0% / 0.4), 0 2px 4px hsl(0 0% 0% / 0.2);
+
+    --sidebar-background: 200 25% 10%;
+    --sidebar-foreground: 140 10% 85%;
+    --sidebar-primary: 152 55% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 40% 18%;
+    --sidebar-accent-foreground: 140 10% 85%;
+    --sidebar-border: 200 25% 18%;
+    --sidebar-ring: 152 55% 40%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Noto Sans', 'Noto Sans Devanagari', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+}
