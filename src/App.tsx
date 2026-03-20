@@ -1,11 +1,12 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { queryClient } from "@/lib/query-client";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppSidebar from "@/components/AppSidebar";
 import TopBar from "@/components/TopBar";
@@ -26,20 +27,18 @@ import { Language } from "./lib/translations";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const queryClient = new QueryClient();
-
 // Mobile Sidebar Component
 const MobileSidebar = ({ lang, isOpen, onClose }: { lang: Language; isOpen: boolean; onClose: () => void }) => {
   return (
     <>
       {/* Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={onClose}
         />
       )}
-      
+
       {/* Sidebar */}
       <div className={`
         fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 z-50 transform transition-transform duration-300 lg:hidden
@@ -56,8 +55,8 @@ const MobileSidebar = ({ lang, isOpen, onClose }: { lang: Language; isOpen: bool
   );
 };
 
-// Separate component for authenticated layout
-const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQuery }: { 
+// Authenticated Layout Component
+const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQuery }: {
   children: React.ReactNode;
   lang: Language;
   setLang: (lang: Language) => void;
@@ -74,7 +73,7 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
         setSidebarOpen(false);
       }
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -84,18 +83,18 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
     <div className="min-h-screen bg-background">
       {/* Mobile Sidebar */}
       <MobileSidebar lang={lang} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      
+
       {/* Desktop Sidebar - Hidden on mobile */}
       <div className="hidden lg:block fixed left-0 top-0 h-full">
         <AppSidebar lang={lang} />
       </div>
-      
+
       {/* Main Content */}
       <div className="lg:ml-64 min-h-screen flex flex-col">
         {/* Top Bar with Mobile Menu Button */}
         <div className="sticky top-0 z-30">
-          <TopBar 
-            lang={lang} 
+          <TopBar
+            lang={lang}
             onToggleLang={() => setLang(lang === "en" ? "mr" : "en")}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -103,7 +102,7 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
             isMobile={isMobile}
           />
         </div>
-        
+
         {/* Page Content */}
         <main className="flex-1">
           {children}
@@ -113,7 +112,7 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
   );
 };
 
-// Separate component for the main app content (to use auth context)
+// AppContent component with routes
 const AppContent = () => {
   const [lang, setLang] = useState<Language>("en");
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,16 +120,15 @@ const AppContent = () => {
 
   return (
     <Routes>
-      {/* Public Routes - No Layout */}
+      {/* Public Routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      
-      {/* Root redirect */}
+
       <Route path="/" element={
         <Navigate to={user ? "/dashboard" : "/login"} />
       } />
-      
-      {/* Protected Routes - ALL USERS CAN ACCESS ALL PAGES - NO allowedRoles! */}
+
+      {/* Protected Routes - ALL USERS CAN ACCESS ALL PAGES */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -138,7 +136,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/profile" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -146,8 +144,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access School Portal */}
+
       <Route path="/school-portal" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -155,8 +152,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Activity Logger */}
+
       <Route path="/activity-logger" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -164,8 +160,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access BEO/DEO Monitor */}
+
       <Route path="/monitor" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -173,8 +168,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Recognition */}
+
       <Route path="/recognition" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -182,8 +176,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Eco-Passports */}
+
       <Route path="/eco-passports" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -191,8 +184,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Analytics */}
+
       <Route path="/analytics" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -200,8 +192,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Community */}
+
       <Route path="/community" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -209,8 +200,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* ✅ ALL ROLES can access Government Resolutions */}
+
       <Route path="/resolutions" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -218,8 +208,7 @@ const AppContent = () => {
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
-      
-      {/* 404 route */}
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

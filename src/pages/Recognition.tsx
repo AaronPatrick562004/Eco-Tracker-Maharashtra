@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Award, 
   Trophy, 
@@ -17,29 +17,26 @@ import {
   Plus,
   Edit,
   Trash2,
-  CheckCircle,
-  XCircle,
-  Clock
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { translations, Language } from "@/lib/translations";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth-context";
+import { recognitionAPI } from "@/lib/api";
 
 interface Recognition {
   id: string;
   title: string;
   description: string;
   recipient: string;
-  recipientRole: string;
+  recipient_role: string;
   school: string;
-  schoolId: string;
   district: string;
   block: string;
   date: string;
@@ -47,98 +44,9 @@ interface Recognition {
   category: "green" | "innovation" | "community" | "excellence";
   likes: number;
   liked?: boolean;
-  image?: string;
+  image_url?: string;
   status: "draft" | "published" | "archived";
 }
-
-const mockRecognitions: Recognition[] = [
-  {
-    id: "1",
-    title: "Green School of the Year",
-    description: "For outstanding contribution to environmental education and sustainable practices.",
-    recipient: "ZP Primary School, Shirdi",
-    recipientRole: "School",
-    school: "ZP Primary School, Shirdi",
-    schoolId: "1",
-    district: "Ahmednagar",
-    block: "Shirur",
-    date: "2024-03-15",
-    type: "school",
-    category: "green",
-    likes: 234,
-    liked: false,
-    image: "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500",
-    status: "published"
-  },
-  {
-    id: "2",
-    title: "Best Eco Coordinator",
-    description: "For exceptional dedication in organizing environmental activities throughout the year.",
-    recipient: "Mr. Patil S.R.",
-    recipientRole: "Coordinator",
-    school: "ZP Primary School, Shirdi",
-    schoolId: "1",
-    district: "Ahmednagar",
-    block: "Shirur",
-    date: "2024-03-10",
-    type: "teacher",
-    category: "excellence",
-    likes: 156,
-    liked: true,
-    status: "published"
-  },
-  {
-    id: "3",
-    title: "Young Environmentalist",
-    description: "For leading the plastic-free campaign and inspiring fellow students.",
-    recipient: "Priya Patil",
-    recipientRole: "Student - Class 8",
-    school: "Municipal School No. 12, Pune",
-    schoolId: "2",
-    district: "Pune",
-    block: "Haveli",
-    date: "2024-03-05",
-    type: "student",
-    category: "community",
-    likes: 89,
-    liked: false,
-    status: "published"
-  },
-  {
-    id: "4",
-    title: "Innovation in Water Conservation",
-    description: "Developed a low-cost rainwater harvesting system for the school.",
-    recipient: "Govt. High School, Nagpur",
-    recipientRole: "School",
-    school: "Govt. High School, Nagpur",
-    schoolId: "4",
-    district: "Nagpur",
-    block: "Nagpur City",
-    date: "2024-02-28",
-    type: "school",
-    category: "innovation",
-    likes: 312,
-    liked: false,
-    status: "published"
-  },
-  {
-    id: "5",
-    title: "Draft Recognition - Upcoming Award",
-    description: "This recognition is still in draft stage.",
-    recipient: "ZP School, Washim",
-    recipientRole: "School",
-    school: "ZP School, Washim",
-    schoolId: "3",
-    district: "Washim",
-    block: "Washim",
-    date: "2024-04-01",
-    type: "school",
-    category: "green",
-    likes: 0,
-    liked: false,
-    status: "draft"
-  },
-];
 
 const categoryColors = {
   green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -154,12 +62,6 @@ const categoryIcons = {
   excellence: "🏆",
 };
 
-const statusConfig = {
-  draft: { label: "Draft", className: "bg-gray-100 text-gray-700" },
-  published: { label: "Published", className: "bg-green-100 text-green-700" },
-  archived: { label: "Archived", className: "bg-red-100 text-red-700" },
-};
-
 interface Props {
   lang: Language;
 }
@@ -168,34 +70,53 @@ const Recognition = ({ lang }: Props) => {
   const t = translations[lang];
   const isMobile = useIsMobile();
   const { user } = useAuth();
+  
+  const [recognitions, setRecognitions] = useState<Recognition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [recognitions, setRecognitions] = useState<Recognition[]>(mockRecognitions);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
+  const [newRecognition, setNewRecognition] = useState({
+    title: '',
+    description: '',
+    recipient: '',
+    recipient_role: '',
+    school: '',
+    district: '',
+    block: '',
+    date: new Date().toISOString().split('T')[0],
+    type: 'school',
+    category: 'green',
+    image_url: ''
+  });
 
-  // Filter recognitions based on role
+  useEffect(() => {
+    fetchRecognitions();
+  }, []);
+
+  const fetchRecognitions = async () => {
+    try {
+      setLoading(true);
+      const data = await recognitionAPI.getAll();
+      setRecognitions(data);
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Error fetching recognitions:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredRecognitions = recognitions.filter(rec => {
-    // Role-based visibility
-    if (user?.role === 'principal') {
-      // Principal only sees their school's recognitions
-      if (rec.school !== user.school) return false;
-      // Principal only sees published recognitions
-      if (rec.status !== 'published') return false;
-    }
+    if (user?.role === 'principal' && rec.school !== user.school) return false;
+    if (user?.role === 'beo' && user.block && rec.block !== user.block) return false;
+    if (user?.role === 'deo' && user.district && rec.district !== user.district) return false;
     
-    if (user?.role === 'beo' && user?.block) {
-      // BEO only sees their block's recognitions
-      if (rec.block !== user.block) return false;
-    }
-    
-    if (user?.role === 'deo' && user?.district) {
-      // DEO only sees their district's recognitions
-      if (rec.district !== user.district) return false;
-    }
-    
-    // Apply search filters
     const matchesSearch = rec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          rec.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          rec.school.toLowerCase().includes(searchQuery.toLowerCase());
@@ -205,118 +126,70 @@ const Recognition = ({ lang }: Props) => {
     return matchesSearch && matchesType && matchesCategory;
   });
 
-  const handleLike = (id: string) => {
-    setRecognitions(prev =>
-      prev.map(rec =>
-        rec.id === id
-          ? { ...rec, liked: !rec.liked, likes: rec.liked ? rec.likes - 1 : rec.likes + 1 }
-          : rec
-      )
-    );
-  };
-
-  const handleDelete = (id: string) => {
-    if (window.confirm(lang === "en" ? "Are you sure you want to delete this recognition?" : "तुम्हाला खात्री आहे की हा सन्मान हटवायचा आहे?")) {
-      setRecognitions(prev => prev.filter(rec => rec.id !== id));
+  const handleLike = async (id: string) => {
+    try {
+      await recognitionAPI.like(id);
+      setRecognitions(prev =>
+        prev.map(rec =>
+          rec.id === id
+            ? { ...rec, liked: !rec.liked, likes: rec.liked ? rec.likes - 1 : rec.likes + 1 }
+            : rec
+        )
+      );
+    } catch (err) {
+      console.error('Error liking recognition:', err);
     }
   };
 
-  const handleStatusChange = (id: string, newStatus: "draft" | "published" | "archived") => {
-    setRecognitions(prev =>
-      prev.map(rec =>
-        rec.id === id ? { ...rec, status: newStatus } : rec
-      )
-    );
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(lang === "en" ? "Are you sure you want to delete this recognition?" : "तुम्हाला खात्री आहे की हा सन्मान हटवायचा आहे?")) return;
+    
+    try {
+      await recognitionAPI.delete(id);
+      setRecognitions(prev => prev.filter(rec => rec.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
-  // Create form for new recognition (State only)
-  if (showCreateForm && user?.role === 'state') {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewRecognition(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateRecognition = async () => {
+    try {
+      setSubmitting(true);
+      const created = await recognitionAPI.create(newRecognition);
+      setRecognitions(prev => [created, ...prev]);
+      setShowCreateModal(false);
+      setNewRecognition({
+        title: '', description: '', recipient: '', recipient_role: '',
+        school: '', district: '', block: '', date: new Date().toISOString().split('T')[0],
+        type: 'school', category: 'green', image_url: ''
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-        <button
-          onClick={() => setShowCreateForm(false)}
-          className="flex items-center gap-2 text-muted-foreground mb-2"
-        >
-          <ChevronRight className="w-5 h-5 rotate-180" />
-          <span>{lang === "en" ? "Back to recognitions" : "सन्मानांकडे परत"}</span>
-        </button>
+      <div className="p-4 sm:p-6 flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{lang === "en" ? "Create New Recognition" : "नवीन सन्मान तयार करा"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4">
-              <div>
-                <label className="text-sm font-medium block mb-1">Title</label>
-                <Input placeholder="e.g., Green School of the Year" />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium block mb-1">Description</label>
-                <Input placeholder="Describe the achievement..." />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium block mb-1">Category</label>
-                  <select className="w-full p-2 rounded-lg border border-border bg-background">
-                    <option value="green">Green</option>
-                    <option value="innovation">Innovation</option>
-                    <option value="community">Community</option>
-                    <option value="excellence">Excellence</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1">Type</label>
-                  <select className="w-full p-2 rounded-lg border border-border bg-background">
-                    <option value="school">School</option>
-                    <option value="teacher">Teacher</option>
-                    <option value="student">Student</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium block mb-1">Recipient</label>
-                <Input placeholder="Name of recipient" />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium block mb-1">School</label>
-                <Input placeholder="School name" />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium block mb-1">District</label>
-                  <Input placeholder="District" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1">Block</label>
-                  <Input placeholder="Block" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium block mb-1">Status</label>
-                <select className="w-full p-2 rounded-lg border border-border bg-background">
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button className="flex-1 bg-green-600 hover:bg-green-700">
-                  {lang === "en" ? "Create Recognition" : "सन्मान तयार करा"}
-                </Button>
-                <Button variant="outline" onClick={() => setShowCreateForm(false)}>
-                  {lang === "en" ? "Cancel" : "रद्द करा"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+  if (error) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">Error: {error}</p>
+          <Button onClick={() => window.location.reload()} className="mt-2">Retry</Button>
+        </div>
       </div>
     );
   }
@@ -334,30 +207,160 @@ const Recognition = ({ lang }: Props) => {
           </p>
         </div>
         
-        {/* Role-based header buttons */}
-        <div className="flex gap-2">
-          {/* ✅ STATE can create new recognitions */}
-          {user?.role === 'state' && (
-            <Button 
-              className="gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-              onClick={() => setShowCreateForm(true)}
-            >
-              <Plus className="w-4 h-4" />
-              {lang === "en" ? "New Recognition" : "नवीन सन्मान"}
-            </Button>
-          )}
-          
-          {/* ✅ DEO/STATE can export */}
-          {(user?.role === 'deo' || user?.role === 'state') && (
-            <Button variant="outline" className="gap-2">
-              <Share2 className="w-4 h-4" />
-              {lang === "en" ? "Export" : "निर्यात करा"}
-            </Button>
-          )}
-        </div>
+        {/* Create Button - Only State */}
+        {user?.role === 'state' && (
+          <Button 
+            className="gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <Plus className="w-4 h-4" />
+            {lang === "en" ? "New Recognition" : "नवीन सन्मान"}
+          </Button>
+        )}
       </div>
 
-      {/* Stats - Filtered by role */}
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">Create New Recognition</h3>
+              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium mb-1">Title *</label>
+                <input
+                  type="text"
+                  name="title"
+                  value={newRecognition.title}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Green School of the Year"
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  name="description"
+                  value={newRecognition.description}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  rows={3}
+                  placeholder="Describe the achievement..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Type</label>
+                <select
+                  name="type"
+                  value={newRecognition.type}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="school">School</option>
+                  <option value="teacher">Teacher</option>
+                  <option value="student">Student</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Category</label>
+                <select
+                  name="category"
+                  value={newRecognition.category}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="green">Green</option>
+                  <option value="innovation">Innovation</option>
+                  <option value="community">Community</option>
+                  <option value="excellence">Excellence</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Recipient Name *</label>
+                <input
+                  type="text"
+                  name="recipient"
+                  value={newRecognition.recipient}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Mr. Patil S.R."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Recipient Role</label>
+                <input
+                  type="text"
+                  name="recipient_role"
+                  value={newRecognition.recipient_role}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Coordinator"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">School</label>
+                <input
+                  type="text"
+                  name="school"
+                  value={newRecognition.school}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., ZP School, Shirdi"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">District</label>
+                <input
+                  type="text"
+                  name="district"
+                  value={newRecognition.district}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Ahmednagar"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Date</label>
+                <input
+                  type="date"
+                  name="date"
+                  value={newRecognition.date}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleCreateRecognition}
+                disabled={submitting}
+              >
+                {submitting ? 'Creating...' : 'Create Recognition'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-3 sm:p-4">
@@ -366,7 +369,7 @@ const Recognition = ({ lang }: Props) => {
                 <Trophy className="w-4 h-4 text-amber-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{lang === "en" ? "Total Awards" : "एकूण पुरस्कार"}</p>
+                <p className="text-xs text-muted-foreground">Total Awards</p>
                 <p className="text-lg sm:text-xl font-bold">{filteredRecognitions.length}</p>
               </div>
             </div>
@@ -379,7 +382,7 @@ const Recognition = ({ lang }: Props) => {
                 <School className="w-4 h-4 text-blue-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{lang === "en" ? "Schools" : "शाळा"}</p>
+                <p className="text-xs text-muted-foreground">Schools</p>
                 <p className="text-lg sm:text-xl font-bold">
                   {filteredRecognitions.filter(r => r.type === 'school').length}
                 </p>
@@ -394,7 +397,7 @@ const Recognition = ({ lang }: Props) => {
                 <Users className="w-4 h-4 text-green-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{lang === "en" ? "Teachers" : "शिक्षक"}</p>
+                <p className="text-xs text-muted-foreground">Teachers</p>
                 <p className="text-lg sm:text-xl font-bold">
                   {filteredRecognitions.filter(r => r.type === 'teacher').length}
                 </p>
@@ -409,7 +412,7 @@ const Recognition = ({ lang }: Props) => {
                 <Star className="w-4 h-4 text-purple-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{lang === "en" ? "Students" : "विद्यार्थी"}</p>
+                <p className="text-xs text-muted-foreground">Students</p>
                 <p className="text-lg sm:text-xl font-bold">
                   {filteredRecognitions.filter(r => r.type === 'student').length}
                 </p>
@@ -430,91 +433,43 @@ const Recognition = ({ lang }: Props) => {
             className="pl-9 w-full"
           />
         </div>
-        <Button 
-          variant="outline" 
-          className="gap-2 w-full sm:w-auto"
-          onClick={() => setShowFilters(!showFilters)}
-        >
+        <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={() => setShowFilters(!showFilters)}>
           <Filter className="w-4 h-4" />
           {lang === "en" ? "Filter" : "फिल्टर"}
         </Button>
       </div>
 
-      {/* Filter Options - Collapsible */}
+      {/* Filter Options */}
       {showFilters && (
         <div className="p-4 bg-muted/30 rounded-lg space-y-3">
           <div>
             <label className="text-sm font-medium block mb-2">Type</label>
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={selectedType === "all" ? "default" : "outline"}
-                onClick={() => setSelectedType("all")}
-              >
-                All
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedType === "school" ? "default" : "outline"}
-                onClick={() => setSelectedType("school")}
-              >
-                Schools
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedType === "teacher" ? "default" : "outline"}
-                onClick={() => setSelectedType("teacher")}
-              >
-                Teachers
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedType === "student" ? "default" : "outline"}
-                onClick={() => setSelectedType("student")}
-              >
-                Students
-              </Button>
+              {['all', 'school', 'teacher', 'student'].map(type => (
+                <Button
+                  key={type}
+                  size="sm"
+                  variant={selectedType === type ? "default" : "outline"}
+                  onClick={() => setSelectedType(type)}
+                >
+                  {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1) + 's'}
+                </Button>
+              ))}
             </div>
           </div>
-          
           <div>
             <label className="text-sm font-medium block mb-2">Category</label>
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={selectedCategory === "all" ? "default" : "outline"}
-                onClick={() => setSelectedCategory("all")}
-              >
-                All
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedCategory === "green" ? "default" : "outline"}
-                onClick={() => setSelectedCategory("green")}
-              >
-                🌱 Green
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedCategory === "innovation" ? "default" : "outline"}
-                onClick={() => setSelectedCategory("innovation")}
-              >
-                💡 Innovation
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedCategory === "community" ? "default" : "outline"}
-                onClick={() => setSelectedCategory("community")}
-              >
-                🤝 Community
-              </Button>
-              <Button
-                size="sm"
-                variant={selectedCategory === "excellence" ? "default" : "outline"}
-                onClick={() => setSelectedCategory("excellence")}
-              >
-                🏆 Excellence
-              </Button>
+              {['all', 'green', 'innovation', 'community', 'excellence'].map(cat => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={selectedCategory === cat ? "default" : "outline"}
+                  onClick={() => setSelectedCategory(cat)}
+                >
+                  {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
@@ -524,44 +479,11 @@ const Recognition = ({ lang }: Props) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredRecognitions.map((recognition) => (
           <Card key={recognition.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-            {recognition.image && (
-              <div className="h-48 overflow-hidden">
-                <img 
-                  src={recognition.image} 
-                  alt={recognition.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
             <CardContent className="p-4">
-              {/* Status Badge - Only visible to State */}
-              {user?.role === 'state' && (
-                <div className="flex justify-end mb-2">
-                  <select
-                    value={recognition.status}
-                    onChange={(e) => handleStatusChange(recognition.id, e.target.value as any)}
-                    className={cn(
-                      "text-xs px-2 py-1 rounded-full border-0",
-                      statusConfig[recognition.status].className
-                    )}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
-              )}
-
               <div className="flex items-start justify-between mb-2">
                 <span className={cn("text-xs px-2 py-1 rounded-full", categoryColors[recognition.category])}>
                   {categoryIcons[recognition.category]} {
-                    lang === "en" 
-                      ? recognition.category.charAt(0).toUpperCase() + recognition.category.slice(1)
-                      : recognition.category === "green" ? "हरित"
-                      : recognition.category === "innovation" ? "नवकल्पना"
-                      : recognition.category === "community" ? "समुदाय"
-                      : "उत्कृष्टता"
+                    recognition.category.charAt(0).toUpperCase() + recognition.category.slice(1)
                   }
                 </span>
                 <span className="text-xs text-muted-foreground">{recognition.date}</span>
@@ -579,7 +501,7 @@ const Recognition = ({ lang }: Props) => {
                 </Avatar>
                 <div>
                   <p className="text-sm font-medium">{recognition.recipient}</p>
-                  <p className="text-xs text-muted-foreground">{recognition.recipientRole}</p>
+                  <p className="text-xs text-muted-foreground">{recognition.recipient_role}</p>
                 </div>
               </div>
 
@@ -596,7 +518,6 @@ const Recognition = ({ lang }: Props) => {
 
               {/* Action Buttons - Role Based */}
               <div className="flex flex-wrap gap-2">
-                {/* Like button - Everyone */}
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -604,46 +525,33 @@ const Recognition = ({ lang }: Props) => {
                   onClick={() => handleLike(recognition.id)}
                 >
                   <Heart className={cn("w-4 h-4 mr-1", recognition.liked && "fill-red-500 text-red-500")} />
-                  {recognition.liked ? (lang === "en" ? "Liked" : "आवडले") : (lang === "en" ? "Like" : "आवडले")}
+                  {recognition.liked ? "Liked" : "Like"}
                 </Button>
 
-                {/* Share button - Everyone */}
                 <Button variant="outline" size="sm" className="flex-1">
                   <Share2 className="w-4 h-4 mr-1" />
-                  {lang === "en" ? "Share" : "शेअर"}
+                  Share
                 </Button>
 
-                {/* Edit button - STATE only */}
+                {/* Edit/Delete - State only */}
                 {user?.role === 'state' && (
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Edit className="w-4 h-4 mr-1" />
-                    Edit
-                  </Button>
-                )}
-
-                {/* Delete button - STATE only */}
-                {user?.role === 'state' && (
-                  <Button 
-                    variant="destructive" 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => handleDelete(recognition.id)}
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Delete
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" className="flex-1">
+                      <Edit className="w-4 h-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => handleDelete(recognition.id)}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Delete
+                    </Button>
+                  </>
                 )}
               </div>
-
-              {/* Draft indicator - visible to all but only for draft status */}
-              {recognition.status === 'draft' && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <span className="text-xs flex items-center gap-1 text-amber-600">
-                    <Clock className="w-3 h-3" />
-                    {lang === "en" ? "Draft - Not published yet" : "मसुदा - अद्याप प्रकाशित केलेले नाही"}
-                  </span>
-                </div>
-              )}
             </CardContent>
           </Card>
         ))}
@@ -653,19 +561,7 @@ const Recognition = ({ lang }: Props) => {
       {filteredRecognitions.length === 0 && (
         <div className="text-center py-12">
           <Award className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-foreground font-medium">
-            {lang === "en" ? "No recognitions found" : "कोणतेही सन्मान आढळले नाहीत"}
-          </p>
-          {user?.role === 'state' && (
-            <Button 
-              variant="outline" 
-              className="mt-4"
-              onClick={() => setShowCreateForm(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {lang === "en" ? "Create First Recognition" : "पहिला सन्मान तयार करा"}
-            </Button>
-          )}
+          <p className="text-foreground font-medium">No recognitions found</p>
         </div>
       )}
     </div>

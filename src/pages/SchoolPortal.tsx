@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Search, Plus, Filter, MapPin, Phone, Mail, Users, CheckCircle, AlertTriangle, XCircle, School, ChevronRight, Edit, Trash2, Download, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Plus, Filter, MapPin, Phone, Mail, Users, CheckCircle, AlertTriangle, XCircle, School, ChevronRight, Edit, Trash2, Download, Eye, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { translations, Language } from "@/lib/translations";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth-context";
+import { schoolsAPI } from "@/lib/api";
 
 interface School {
   id: string;
@@ -12,24 +13,13 @@ interface School {
   udise: string;
   district: string;
   block: string;
-  coordinator: string;
-  phone: string;
-  email: string;
-  students: number;
+  coordinator_name: string;
+  coordinator_phone: string;
+  coordinator_email: string;
+  students_count: number;
   status: "active" | "pending" | "inactive";
   compliance: "green" | "amber" | "red";
 }
-
-const mockSchools: School[] = [
-  { id: "1", name: "ZP Primary School, Shirdi", udise: "27240100101", district: "Ahmednagar", block: "Rahata", coordinator: "Mr. Patil S.R.", phone: "+91 98765 43210", email: "zpshirdi@edu.mh.in", students: 320, status: "active", compliance: "green" },
-  { id: "2", name: "Municipal School No. 12", udise: "27250200202", district: "Pune", block: "Haveli", coordinator: "Ms. Deshmukh A.V.", phone: "+91 98765 43211", email: "ms12pune@edu.mh.in", students: 580, status: "active", compliance: "amber" },
-  { id: "3", name: "ZP School, Washim", udise: "27360300303", district: "Washim", block: "Washim", coordinator: "Mr. Jadhav R.K.", phone: "+91 98765 43212", email: "zpwashim@edu.mh.in", students: 210, status: "active", compliance: "red" },
-  { id: "4", name: "Govt. High School, Nagpur", udise: "27270400404", district: "Nagpur", block: "Nagpur City", coordinator: "Ms. Kulkarni P.M.", phone: "+91 98765 43213", email: "ghsnagpur@edu.mh.in", students: 890, status: "active", compliance: "green" },
-  { id: "5", name: "Adarsh Vidyalaya, Kolhapur", udise: "27300500505", district: "Kolhapur", block: "Karvir", coordinator: "Mr. Shinde V.B.", phone: "+91 98765 43214", email: "avkolhapur@edu.mh.in", students: 450, status: "pending", compliance: "red" },
-  { id: "6", name: "Kendriya Vidyalaya, Thane", udise: "27250600606", district: "Thane", block: "Thane", coordinator: "Ms. Sharma N.D.", phone: "+91 98765 43215", email: "kvthane@edu.mh.in", students: 1200, status: "active", compliance: "green" },
-  { id: "7", name: "ZP School, Beed", udise: "27290700707", district: "Beed", block: "Beed", coordinator: "Mr. Gaikwad T.S.", phone: "+91 98765 43216", email: "zpbeed@edu.mh.in", students: 180, status: "inactive", compliance: "red" },
-  { id: "8", name: "Navodaya Vidyalaya, Satara", udise: "27300800808", district: "Satara", block: "Satara", coordinator: "Ms. More L.A.", phone: "+91 98765 43217", email: "nvsatara@edu.mh.in", students: 640, status: "active", compliance: "green" },
-];
 
 const statusConfig = {
   active: { label: "Active", className: "bg-eco-green-light text-eco-green" },
@@ -50,12 +40,52 @@ interface Props {
 const SchoolPortal = ({ lang }: Props) => {
   const t = translations[lang];
   const isMobile = useIsMobile();
-  const { user } = useAuth(); // 👈 Get logged-in user
+  const { user } = useAuth();
+  
+  const [schools, setSchools] = useState<School[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const [search, setSearch] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [showMobileDetail, setShowMobileDetail] = useState(false);
+  
+  // Add School Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newSchool, setNewSchool] = useState({
+    name: '',
+    udise: '',
+    district: '',
+    block: '',
+    coordinator_name: '',
+    coordinator_phone: '',
+    coordinator_email: '',
+    students_count: 0,
+    status: 'active' as const,
+    compliance: 'green' as const
+  });
 
-  const filtered = mockSchools.filter(
+  // Fetch schools from backend
+  useEffect(() => {
+    fetchSchools();
+  }, []);
+
+  const fetchSchools = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await schoolsAPI.getAll();
+      setSchools(data);
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Error fetching schools:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = schools.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.district.toLowerCase().includes(search.toLowerCase()) ||
@@ -72,6 +102,86 @@ const SchoolPortal = ({ lang }: Props) => {
   const handleBackToList = () => {
     setShowMobileDetail(false);
   };
+
+  // Handle Add School form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewSchool(prev => ({
+      ...prev,
+      [name]: name === 'students_count' ? parseInt(value) || 0 : value
+    }));
+  };
+
+  // Handle Add School submission
+  const handleAddSchool = async () => {
+    try {
+      setSubmitting(true);
+      setError(null);
+      
+      // Validate required fields
+      if (!newSchool.name || !newSchool.udise || !newSchool.district || !newSchool.block) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      // Call API to create school
+      const created = await schoolsAPI.create(newSchool);
+      
+      // Add new school to list
+      setSchools(prev => [created, ...prev]);
+      
+      // Close modal and reset form
+      setShowAddModal(false);
+      setNewSchool({
+        name: '', udise: '', district: '', block: '', coordinator_name: '',
+        coordinator_phone: '', coordinator_email: '', students_count: 0,
+        status: 'active', compliance: 'green'
+      });
+      
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Delete School
+  const handleDeleteSchool = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this school?')) return;
+    
+    try {
+      await schoolsAPI.delete(id);
+      setSchools(prev => prev.filter(s => s.id !== id));
+      if (selectedSchool?.id === id) {
+        setSelectedSchool(null);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4 sm:p-6 flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">Error: {error}</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            className="mt-2"
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Mobile detail view
   if (isMobile && showMobileDetail && selectedSchool) {
@@ -104,17 +214,17 @@ const SchoolPortal = ({ lang }: Props) => {
             
             <div className="flex items-center gap-3">
               <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-foreground">{selectedSchool.coordinator}</span>
+              <span className="text-foreground">{selectedSchool.coordinator_name}</span>
             </div>
             
             <div className="flex items-center gap-3">
               <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-foreground">{selectedSchool.phone}</span>
+              <span className="text-foreground">{selectedSchool.coordinator_phone}</span>
             </div>
             
             <div className="flex items-center gap-3">
               <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-foreground break-all">{selectedSchool.email}</span>
+              <span className="text-foreground break-all">{selectedSchool.coordinator_email}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
@@ -124,7 +234,7 @@ const SchoolPortal = ({ lang }: Props) => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Students</p>
-                <p className="text-sm text-foreground">{selectedSchool.students}</p>
+                <p className="text-sm text-foreground">{selectedSchool.students_count}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Status</p>
@@ -136,13 +246,12 @@ const SchoolPortal = ({ lang }: Props) => {
 
             {/* Mobile action buttons - Role Based */}
             <div className="flex flex-col gap-2 mt-4">
-              {/* View - Everyone */}
               <Button variant="outline" className="w-full">
                 <Eye className="w-4 h-4 mr-2" />
                 View Full Profile
               </Button>
               
-              {/* ✅ Principal can edit THEIR school - using 'school' instead of 'schoolId' */}
+              {/* Principal can edit their school */}
               {user?.role === 'principal' && selectedSchool.name === user?.school && (
                 <Button className="w-full bg-blue-600">
                   <Edit className="w-4 h-4 mr-2" />
@@ -150,7 +259,7 @@ const SchoolPortal = ({ lang }: Props) => {
                 </Button>
               )}
               
-              {/* ✅ BEO/DEO/State can verify */}
+              {/* BEO/DEO/State can verify */}
               {(user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state') && (
                 <Button variant="outline" className="w-full border-green-600 text-green-600">
                   <CheckCircle className="w-4 h-4 mr-2" />
@@ -158,9 +267,13 @@ const SchoolPortal = ({ lang }: Props) => {
                 </Button>
               )}
               
-              {/* ✅ ONLY State can delete */}
+              {/* Only State can delete */}
               {user?.role === 'state' && (
-                <Button variant="destructive" className="w-full">
+                <Button 
+                  variant="destructive" 
+                  className="w-full"
+                  onClick={() => handleDeleteSchool(selectedSchool.id)}
+                >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete School
                 </Button>
@@ -172,6 +285,7 @@ const SchoolPortal = ({ lang }: Props) => {
     );
   }
 
+  // Main render
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
@@ -185,22 +299,185 @@ const SchoolPortal = ({ lang }: Props) => {
           </p>
         </div>
         
-        {/* ✅ ONLY STATE OFFICER can add schools */}
+        {/* Only State Officer can add schools */}
         {user?.role === 'state' && (
-          <Button className="gap-2 gradient-primary text-primary-foreground border-0 w-full sm:w-auto">
+          <Button 
+            className="gap-2 gradient-primary text-primary-foreground border-0 w-full sm:w-auto"
+            onClick={() => setShowAddModal(true)}
+          >
             <Plus className="w-4 h-4" />
             {lang === "en" ? "Add School" : "शाळा जोडा"}
           </Button>
         )}
       </div>
 
-      {/* Stats Row */}
+      {/* Add School Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">Add New School</h3>
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">School Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={newSchool.name}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., ZP School, Shirdi"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">UDISE Code *</label>
+                <input
+                  type="text"
+                  name="udise"
+                  value={newSchool.udise}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., 27240100101"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">District *</label>
+                <input
+                  type="text"
+                  name="district"
+                  value={newSchool.district}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Pune"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Block *</label>
+                <input
+                  type="text"
+                  name="block"
+                  value={newSchool.block}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Haveli"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Coordinator Name</label>
+                <input
+                  type="text"
+                  name="coordinator_name"
+                  value={newSchool.coordinator_name}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., Mr. Patil S.R."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Coordinator Phone</label>
+                <input
+                  type="text"
+                  name="coordinator_phone"
+                  value={newSchool.coordinator_phone}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., +91 98765 43210"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Coordinator Email</label>
+                <input
+                  type="email"
+                  name="coordinator_email"
+                  value={newSchool.coordinator_email}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., school@edu.mh.in"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Students Count</label>
+                <input
+                  type="number"
+                  name="students_count"
+                  value={newSchool.students_count}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                  placeholder="e.g., 500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Status</label>
+                <select
+                  name="status"
+                  value={newSchool.status}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Compliance</label>
+                <select
+                  name="compliance"
+                  value={newSchool.compliance}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg"
+                >
+                  <option value="green">Green</option>
+                  <option value="amber">Amber</option>
+                  <option value="red">Red</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleAddSchool}
+                disabled={submitting}
+              >
+                {submitting ? 'Adding...' : 'Add School'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Row - using real data */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         {[
-          { label: lang === "en" ? "Total Schools" : "एकूण शाळा", value: "75,420", icon: "🏫" },
-          { label: lang === "en" ? "Active" : "सक्रिय", value: "68,290", icon: "✅" },
-          { label: lang === "en" ? "Pending" : "प्रलंबित", value: "4,830", icon: "⏳" },
-          { label: lang === "en" ? "Inactive" : "निष्क्रिय", value: "2,300", icon: "⚠️" },
+          { label: lang === "en" ? "Total Schools" : "एकूण शाळा", value: schools.length.toString(), icon: "🏫" },
+          { label: lang === "en" ? "Active" : "सक्रिय", value: schools.filter(s => s.status === 'active').length.toString(), icon: "✅" },
+          { label: lang === "en" ? "Pending" : "प्रलंबित", value: schools.filter(s => s.status === 'pending').length.toString(), icon: "⏳" },
+          { label: lang === "en" ? "Inactive" : "निष्क्रिय", value: schools.filter(s => s.status === 'inactive').length.toString(), icon: "⚠️" },
         ].map((stat, i) => (
           <div key={i} className="bg-card rounded-xl border border-border shadow-card p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
             <span className="text-xl sm:text-2xl">{stat.icon}</span>
@@ -230,9 +507,8 @@ const SchoolPortal = ({ lang }: Props) => {
         </Button>
       </div>
 
-      {/* Table & Detail split */}
+      {/* Table */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* School List */}
         <div className={cn(
           "lg:col-span-2 bg-card rounded-xl border border-border shadow-card overflow-hidden",
           isMobile && showMobileDetail ? "hidden" : "block"
@@ -286,7 +562,7 @@ const SchoolPortal = ({ lang }: Props) => {
                       {school.district}
                     </td>
                     <td className="px-3 sm:px-4 py-3 text-center text-foreground text-xs hidden sm:table-cell">
-                      {school.students}
+                      {school.students_count}
                     </td>
                     <td className="px-3 sm:px-4 py-3 text-center">
                       <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", statusConfig[school.status].className)}>
@@ -300,6 +576,15 @@ const SchoolPortal = ({ lang }: Props) => {
                 ))}
               </tbody>
             </table>
+            
+            {filtered.length === 0 && (
+              <div className="text-center py-8">
+                <School className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-foreground font-medium">
+                  {lang === "en" ? "No schools found" : "कोणत्याही शाळा आढळल्या नाहीत"}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -322,15 +607,15 @@ const SchoolPortal = ({ lang }: Props) => {
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Users className="w-4 h-4 shrink-0" />
-                  <span>{selectedSchool.coordinator}</span>
+                  <span>{selectedSchool.coordinator_name}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Phone className="w-4 h-4 shrink-0" />
-                  <span>{selectedSchool.phone}</span>
+                  <span>{selectedSchool.coordinator_phone}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Mail className="w-4 h-4 shrink-0" />
-                  <span>{selectedSchool.email}</span>
+                  <span>{selectedSchool.coordinator_email}</span>
                 </div>
               </div>
 
@@ -341,7 +626,7 @@ const SchoolPortal = ({ lang }: Props) => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Students</span>
-                  <span className="text-foreground">{selectedSchool.students}</span>
+                  <span className="text-foreground">{selectedSchool.students_count}</span>
                 </div>
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-muted-foreground">Status</span>
@@ -353,13 +638,12 @@ const SchoolPortal = ({ lang }: Props) => {
 
               {/* Desktop action buttons - Role Based */}
               <div className="flex flex-col gap-2 mt-4">
-                {/* View - Everyone */}
                 <Button variant="outline" className="w-full">
                   <Eye className="w-4 h-4 mr-2" />
                   View Full Profile
                 </Button>
                 
-                {/* ✅ Principal can edit THEIR school - using 'school' instead of 'schoolId' */}
+                {/* Principal can edit their school */}
                 {user?.role === 'principal' && selectedSchool.name === user?.school && (
                   <Button className="w-full bg-blue-600">
                     <Edit className="w-4 h-4 mr-2" />
@@ -367,7 +651,7 @@ const SchoolPortal = ({ lang }: Props) => {
                   </Button>
                 )}
                 
-                {/* ✅ BEO/DEO/State can verify */}
+                {/* BEO/DEO/State can verify */}
                 {(user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state') && (
                   <Button variant="outline" className="w-full border-green-600 text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
@@ -375,9 +659,13 @@ const SchoolPortal = ({ lang }: Props) => {
                   </Button>
                 )}
                 
-                {/* ✅ ONLY State can delete */}
+                {/* Only State can delete */}
                 {user?.role === 'state' && (
-                  <Button variant="destructive" className="w-full">
+                  <Button 
+                    variant="destructive" 
+                    className="w-full"
+                    onClick={() => handleDeleteSchool(selectedSchool.id)}
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete School
                   </Button>
