@@ -1,34 +1,14 @@
-import { useState, useEffect } from "react";
-import { 
-  Award, 
-  Trophy, 
-  Medal, 
-  Star, 
-  Crown,
-  School,
-  Users,
-  Calendar,
-  MapPin,
-  ChevronRight,
-  Filter,
-  Search,
-  Heart,
-  Share2,
-  Plus,
-  Edit,
-  Trash2,
-  X
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { translations, Language } from "@/lib/translations";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useAuth } from "@/lib/auth-context";
-import { recognitionAPI } from "@/lib/api";
+// src/pages/Recognition.tsx
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { translations, Language } from '@/lib/translations';
+import { Award, Heart, Share2, Plus, Edit, Trash2, X, MapPin, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 
 interface Recognition {
   id: string;
@@ -40,27 +20,11 @@ interface Recognition {
   district: string;
   block: string;
   date: string;
-  type: "school" | "teacher" | "student";
-  category: "green" | "innovation" | "community" | "excellence";
+  type: string;
+  category: string;
   likes: number;
-  liked?: boolean;
-  image_url?: string;
-  status: "draft" | "published" | "archived";
+  created_at: string;
 }
-
-const categoryColors = {
-  green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  innovation: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  community: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  excellence: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-};
-
-const categoryIcons = {
-  green: "🌱",
-  innovation: "💡",
-  community: "🤝",
-  excellence: "🏆",
-};
 
 interface Props {
   lang: Language;
@@ -68,408 +32,501 @@ interface Props {
 
 const Recognition = ({ lang }: Props) => {
   const t = translations[lang];
-  const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   
   const [recognitions, setRecognitions] = useState<Recognition[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedType, setSelectedType] = useState<string>("all");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const [newRecognition, setNewRecognition] = useState({
-    title: '',
-    description: '',
-    recipient: '',
-    recipient_role: '',
-    school: '',
+  const [formData, setFormData] = useState({
+    title: '', 
+    description: '', 
+    recipient: '', 
+    recipient_role: '', 
+    school: '', 
     district: '',
     block: '',
-    date: new Date().toISOString().split('T')[0],
-    type: 'school',
-    category: 'green',
-    image_url: ''
+    date: new Date().toISOString().split('T')[0], 
+    type: 'teacher', 
+    category: 'green'
   });
+
+  // ✅ FIX: Direct role-based permissions for recognition
+  const canCreate = user?.role === 'state' || 
+                    user?.role === 'deo' || 
+                    user?.role === 'beo' ||
+                    user?.role === 'principal';
+  
+  const canDelete = user?.role === 'state' || 
+                    user?.role === 'deo' || 
+                    user?.role === 'beo';
+  
+  const canEdit = user?.role === 'state' || 
+                  user?.role === 'deo' || 
+                  user?.role === 'beo';
 
   useEffect(() => {
     fetchRecognitions();
+    
+    const subscription = supabase
+      .channel('recognitions-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'recognitions' },
+        () => fetchRecognitions()
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchRecognitions = async () => {
     try {
       setLoading(true);
-      const data = await recognitionAPI.getAll();
-      setRecognitions(data);
-    } catch (err: any) {
-      setError(err.message);
-      console.error('Error fetching recognitions:', err);
-    } finally {
-      setLoading(false);
+      let query = supabase.from('recognitions').select('*');
+      
+      // ✅ Role-based filtering
+      if (user?.role === 'principal' && user?.school) {
+        query = query.eq('school', user.school);
+      } else if (user?.role === 'beo' && user?.block) {
+        query = query.eq('block', user.block);
+      } else if (user?.role === 'deo' && user?.district) {
+        query = query.eq('district', user.district);
+      }
+      // State sees all (no filter)
+      
+      const { data, error } = await query.order('date', { ascending: false });
+      if (error) throw error;
+      setRecognitions(data || []);
+    } catch (err) { 
+      console.error(err); 
+      setError('Failed to fetch recognitions');
+    } finally { 
+      setLoading(false); 
     }
   };
 
-  const filteredRecognitions = recognitions.filter(rec => {
-    if (user?.role === 'principal' && rec.school !== user.school) return false;
-    if (user?.role === 'beo' && user.block && rec.block !== user.block) return false;
-    if (user?.role === 'deo' && user.district && rec.district !== user.district) return false;
+  // ✅ Open form with pre-filled data based on user role
+  const openCreateForm = () => {
+    // Reset form first
+    setFormData({
+      title: '', 
+      description: '', 
+      recipient: '', 
+      recipient_role: '', 
+      school: '', 
+      district: '',
+      block: '',
+      date: new Date().toISOString().split('T')[0], 
+      type: 'teacher', 
+      category: 'green'
+    });
     
-    const matchesSearch = rec.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         rec.recipient.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         rec.school.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = selectedType === "all" || rec.type === selectedType;
-    const matchesCategory = selectedCategory === "all" || rec.category === selectedCategory;
-    
-    return matchesSearch && matchesType && matchesCategory;
-  });
-
-  const handleLike = async (id: string) => {
-    try {
-      await recognitionAPI.like(id);
-      setRecognitions(prev =>
-        prev.map(rec =>
-          rec.id === id
-            ? { ...rec, liked: !rec.liked, likes: rec.liked ? rec.likes - 1 : rec.likes + 1 }
-            : rec
-        )
-      );
-    } catch (err) {
-      console.error('Error liking recognition:', err);
+    // Pre-fill based on user role
+    if (user?.role === 'principal' && user?.school) {
+      setFormData(prev => ({
+        ...prev,
+        school: user.school || '',
+        district: user.district || '',
+        block: user.block || ''
+      }));
+    } else if (user?.role === 'beo' && user?.block) {
+      setFormData(prev => ({
+        ...prev,
+        block: user.block || '',
+        district: user.district || ''
+      }));
+    } else if (user?.role === 'deo' && user?.district) {
+      setFormData(prev => ({
+        ...prev,
+        district: user.district || ''
+      }));
     }
+    
+    setShowForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm(lang === "en" ? "Are you sure you want to delete this recognition?" : "तुम्हाला खात्री आहे की हा सन्मान हटवायचा आहे?")) return;
+  const handleCreate = async () => {
+    setSubmitting(true);
+    setError(null);
     
     try {
-      await recognitionAPI.delete(id);
-      setRecognitions(prev => prev.filter(rec => rec.id !== id));
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setNewRecognition(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleCreateRecognition = async () => {
-    try {
-      setSubmitting(true);
-      const created = await recognitionAPI.create(newRecognition);
-      setRecognitions(prev => [created, ...prev]);
-      setShowCreateModal(false);
-      setNewRecognition({
-        title: '', description: '', recipient: '', recipient_role: '',
-        school: '', district: '', block: '', date: new Date().toISOString().split('T')[0],
-        type: 'school', category: 'green', image_url: ''
+      // Validate required fields
+      if (!formData.title.trim()) throw new Error('Title is required');
+      if (!formData.recipient.trim()) throw new Error('Recipient name is required');
+      
+      // ✅ Prevent DEO from creating for other districts
+      if (user?.role === 'deo' && formData.district !== user.district) {
+        throw new Error(`You can only create recognitions for ${user.district} district`);
+      }
+      
+      // ✅ Prevent BEO from creating for other blocks
+      if (user?.role === 'beo' && formData.block !== user.block) {
+        throw new Error(`You can only create recognitions for ${user.block} block`);
+      }
+      
+      // ✅ Prevent Principal from creating for other schools
+      if (user?.role === 'principal' && formData.school !== user.school) {
+        throw new Error(`You can only create recognitions for ${user.school}`);
+      }
+      
+      const { error } = await supabase
+        .from('recognitions')
+        .insert([{ 
+          ...formData, 
+          likes: 0, 
+          created_at: new Date().toISOString() 
+        }]);
+      
+      if (error) throw error;
+      
+      setShowForm(false);
+      setFormData({
+        title: '', description: '', recipient: '', recipient_role: '', 
+        school: '', district: '', block: '', date: new Date().toISOString().split('T')[0], 
+        type: 'teacher', category: 'green'
       });
-    } catch (err: any) {
+      fetchRecognitions();
+      alert('✅ Recognition added successfully!');
+    } catch (err: any) { 
       setError(err.message);
-    } finally {
-      setSubmitting(false);
+      alert('❌ Failed to add: ' + err.message);
+    } finally { 
+      setSubmitting(false); 
+    }
+  };
+
+  const handleDelete = async (id: string, recognition: Recognition) => {
+    // ✅ Prevent DEO from deleting other districts
+    if (user?.role === 'deo' && recognition.district !== user.district) {
+      alert('❌ You can only delete recognitions from your own district!');
+      return;
+    }
+    
+    // ✅ Prevent BEO from deleting other blocks
+    if (user?.role === 'beo' && recognition.block !== user.block) {
+      alert('❌ You can only delete recognitions from your own block!');
+      return;
+    }
+    
+    // ✅ Prevent Principal from deleting other schools
+    if (user?.role === 'principal' && recognition.school !== user.school) {
+      alert('❌ You can only delete recognitions from your own school!');
+      return;
+    }
+    
+    if (!confirm('Delete this recognition?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('recognitions')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchRecognitions();
+      alert('✅ Deleted successfully!');
+    } catch (err) { 
+      alert('❌ Failed to delete'); 
+    }
+  };
+
+  const handleLike = async (id: string, currentLikes: number) => {
+    try {
+      const { error } = await supabase
+        .from('recognitions')
+        .update({ likes: currentLikes + 1 })
+        .eq('id', id);
+      if (error) throw error;
+      setRecognitions(prev => prev.map(r => r.id === id ? { ...r, likes: r.likes + 1 } : r));
+    } catch (err) { 
+      console.error(err); 
+    }
+  };
+
+  const handleShare = async (recognition: Recognition) => {
+    const shareText = `${recognition.title}\n\n${recognition.description}\n\n🏆 Awarded to: ${recognition.recipient} (${recognition.recipient_role})\n🏫 School: ${recognition.school}\n📍 District: ${recognition.district}\n\n✨ Recognized by EcoTrack Maharashtra`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: recognition.title,
+          text: shareText,
+        });
+      } catch (err) {
+        console.log('Share cancelled');
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        alert('✅ Recognition details copied to clipboard!');
+      } catch (err) {
+        alert('❌ Failed to copy');
+      }
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'green': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+      case 'innovation': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'community': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+      case 'excellence': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'green': return '🌱';
+      case 'innovation': return '💡';
+      case 'community': return '🤝';
+      case 'excellence': return '🏆';
+      default: return '⭐';
     }
   };
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 flex justify-center items-center min-h-[400px]">
+      <div className="flex justify-center items-center min-h-[400px]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="p-4 sm:p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600">Error: {error}</p>
-          <Button onClick={() => window.location.reload()} className="mt-2">Retry</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-            {t.recognition}
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            {lang === "en" ? "Celebrating excellence in environmental education" : "पर्यावरण शिक्षणातील उत्कृष्टतेचा सन्मान"}
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">Recognition & Awards</h1>
+          <p className="text-muted-foreground mt-1">Celebrating excellence in environmental education</p>
         </div>
-        
-        {/* Create Button - Only State */}
-        {user?.role === 'state' && (
+        {canCreate && (
           <Button 
-            className="gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateForm}
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
           >
-            <Plus className="w-4 h-4" />
-            {lang === "en" ? "New Recognition" : "नवीन सन्मान"}
+            <Plus className="w-4 h-4" /> Add Recognition
           </Button>
         )}
       </div>
 
-      {/* Create Modal */}
-      {showCreateModal && (
+      {/* Add Recognition Modal */}
+      {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Create New Recognition</h3>
-              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-5 h-5" />
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Recognition</h2>
+              <button 
+                onClick={() => setShowForm(false)} 
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-1">Title *</label>
-                <input
-                  type="text"
+
+            <div className="p-6 space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <Input
                   name="title"
-                  value={newRecognition.title}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
+                  value={formData.title}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
                   placeholder="e.g., Green School of the Year"
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
                 />
               </div>
-              
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-1">Description</label>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                  Description
+                </label>
                 <textarea
                   name="description"
-                  value={newRecognition.description}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                  rows={3}
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  rows={4}
+                  className="w-full p-3 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 resize-y"
                   placeholder="Describe the achievement..."
                 />
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Type</label>
-                <select
-                  name="type"
-                  value={newRecognition.type}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                >
-                  <option value="school">School</option>
-                  <option value="teacher">Teacher</option>
-                  <option value="student">Student</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Category</label>
-                <select
-                  name="category"
-                  value={newRecognition.category}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                >
-                  <option value="green">Green</option>
-                  <option value="innovation">Innovation</option>
-                  <option value="community">Community</option>
-                  <option value="excellence">Excellence</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Recipient Name *</label>
-                <input
-                  type="text"
-                  name="recipient"
-                  value={newRecognition.recipient}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                  placeholder="e.g., Mr. Patil S.R."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Recipient Role</label>
-                <input
-                  type="text"
-                  name="recipient_role"
-                  value={newRecognition.recipient_role}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                  placeholder="e.g., Coordinator"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">School</label>
-                <input
-                  type="text"
-                  name="school"
-                  value={newRecognition.school}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                  placeholder="e.g., ZP School, Shirdi"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">District</label>
-                <input
-                  type="text"
-                  name="district"
-                  value={newRecognition.district}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                  placeholder="e.g., Ahmednagar"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Date</label>
-                <input
-                  type="date"
-                  name="date"
-                  value={newRecognition.date}
-                  onChange={handleInputChange}
-                  className="w-full p-2 border rounded-lg"
-                />
-              </div>
-            </div>
-            
-            <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-                Cancel
-              </Button>
-              <Button 
-                className="bg-green-600 hover:bg-green-700"
-                onClick={handleCreateRecognition}
-                disabled={submitting}
-              >
-                {submitting ? 'Creating...' : 'Create Recognition'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                <Trophy className="w-4 h-4 text-amber-600" />
+              {/* Recipient Name and Role */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Recipient Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    name="recipient"
+                    value={formData.recipient}
+                    onChange={(e) => setFormData({...formData, recipient: e.target.value})}
+                    placeholder="e.g., Mr. Patil S.R."
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Role
+                  </label>
+                  <Input
+                    name="recipient_role"
+                    value={formData.recipient_role}
+                    onChange={(e) => setFormData({...formData, recipient_role: e.target.value})}
+                    placeholder="e.g., Coordinator, Principal, Student"
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Awards</p>
-                <p className="text-lg sm:text-xl font-bold">{filteredRecognitions.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <School className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Schools</p>
-                <p className="text-lg sm:text-xl font-bold">
-                  {filteredRecognitions.filter(r => r.type === 'school').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Users className="w-4 h-4 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Teachers</p>
-                <p className="text-lg sm:text-xl font-bold">
-                  {filteredRecognitions.filter(r => r.type === 'teacher').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <Star className="w-4 h-4 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Students</p>
-                <p className="text-lg sm:text-xl font-bold">
-                  {filteredRecognitions.filter(r => r.type === 'student').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder={lang === "en" ? "Search recognitions..." : "सन्मान शोधा..."}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 w-full"
-          />
-        </div>
-        <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={() => setShowFilters(!showFilters)}>
-          <Filter className="w-4 h-4" />
-          {lang === "en" ? "Filter" : "फिल्टर"}
-        </Button>
-      </div>
+              {/* School, District, Block */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    School
+                  </label>
+                  {/* ✅ Make School field read-only for Principal (auto-filled) */}
+                  {user?.role === 'principal' ? (
+                    <Input
+                      value={user?.school || formData.school}
+                      disabled
+                      className="w-full p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                    />
+                  ) : (
+                    <Input
+                      name="school"
+                      value={formData.school}
+                      onChange={(e) => setFormData({...formData, school: e.target.value})}
+                      placeholder="e.g., ZP Primary School, Shirdi"
+                      className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                    />
+                  )}
+                  {user?.role === 'principal' && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Auto-set to: {user?.school || 'your school'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    District
+                  </label>
+                  {/* ✅ Make District field read-only for BEO and Principal */}
+                  {(user?.role === 'beo' || user?.role === 'principal') ? (
+                    <Input
+                      value={user?.district || formData.district}
+                      disabled
+                      className="w-full p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                    />
+                  ) : (
+                    <Input
+                      name="district"
+                      value={formData.district}
+                      onChange={(e) => setFormData({...formData, district: e.target.value})}
+                      placeholder="e.g., Ahmednagar"
+                      className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                    />
+                  )}
+                  {(user?.role === 'beo' || user?.role === 'principal') && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Auto-set to: {user?.district || 'your district'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Block
+                  </label>
+                  {/* ✅ Make Block field read-only for BEO and Principal */}
+                  {(user?.role === 'beo' || user?.role === 'principal') ? (
+                    <Input
+                      value={user?.block || formData.block}
+                      disabled
+                      className="w-full p-2 border rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                    />
+                  ) : (
+                    <Input
+                      name="block"
+                      value={formData.block}
+                      onChange={(e) => setFormData({...formData, block: e.target.value})}
+                      placeholder="e.g., Haveli"
+                      className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                    />
+                  )}
+                  {(user?.role === 'beo' || user?.role === 'principal') && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Auto-set to: {user?.block || 'your block'}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-      {/* Filter Options */}
-      {showFilters && (
-        <div className="p-4 bg-muted/30 rounded-lg space-y-3">
-          <div>
-            <label className="text-sm font-medium block mb-2">Type</label>
-            <div className="flex flex-wrap gap-2">
-              {['all', 'school', 'teacher', 'student'].map(type => (
-                <Button
-                  key={type}
-                  size="sm"
-                  variant={selectedType === type ? "default" : "outline"}
-                  onClick={() => setSelectedType(type)}
-                >
-                  {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1) + 's'}
+              {/* Date, Type, Category */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Date
+                  </label>
+                  <Input
+                    type="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({...formData, date: e.target.value})}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Type
+                  </label>
+                  <select
+                    name="type"
+                    value={formData.type}
+                    onChange={(e) => setFormData({...formData, type: e.target.value})}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 cursor-pointer"
+                  >
+                    <option value="school">🏫 School</option>
+                    <option value="teacher">👨‍🏫 Teacher</option>
+                    <option value="student">👩‍🎓 Student</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+                    Category
+                  </label>
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 cursor-pointer"
+                  >
+                    <option value="green">🌱 Green</option>
+                    <option value="innovation">💡 Innovation</option>
+                    <option value="community">🤝 Community</option>
+                    <option value="excellence">🏆 Excellence</option>
+                  </select>
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={submitting} className="bg-green-600 hover:bg-green-700">
+                  {submitting ? 'Adding...' : 'Add Recognition'}
                 </Button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-2">Category</label>
-            <div className="flex flex-wrap gap-2">
-              {['all', 'green', 'innovation', 'community', 'excellence'].map(cat => (
-                <Button
-                  key={cat}
-                  size="sm"
-                  variant={selectedCategory === cat ? "default" : "outline"}
-                  onClick={() => setSelectedCategory(cat)}
-                >
-                  {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </Button>
-              ))}
+              </div>
             </div>
           </div>
         </div>
@@ -477,79 +534,63 @@ const Recognition = ({ lang }: Props) => {
 
       {/* Recognitions Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredRecognitions.map((recognition) => (
-          <Card key={recognition.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+        {recognitions.map(rec => (
+          <Card key={rec.id} className="overflow-hidden hover:shadow-lg transition-shadow">
             <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <span className={cn("text-xs px-2 py-1 rounded-full", categoryColors[recognition.category])}>
-                  {categoryIcons[recognition.category]} {
-                    recognition.category.charAt(0).toUpperCase() + recognition.category.slice(1)
-                  }
+              <div className="flex justify-between items-start mb-2">
+                <Badge className={getCategoryColor(rec.category)}>
+                  {getCategoryIcon(rec.category)} {rec.category}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(rec.date).toLocaleDateString()}
                 </span>
-                <span className="text-xs text-muted-foreground">{recognition.date}</span>
               </div>
-
-              <h3 className="font-semibold text-foreground mb-1">{recognition.title}</h3>
-              <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{recognition.description}</p>
-
-              <div className="flex items-center gap-3 mb-3">
+              <h3 className="font-semibold text-foreground mt-2">{rec.title}</h3>
+              <p className="text-sm text-muted-foreground line-clamp-2 my-2">{rec.description}</p>
+              <div className="flex items-center gap-3 my-3">
                 <Avatar className="w-10 h-10">
-                  <AvatarFallback>
-                    {recognition.type === "school" ? "🏫" :
-                     recognition.type === "teacher" ? "👨‍🏫" : "👩‍🎓"}
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {rec.type === 'school' ? '🏫' : rec.type === 'teacher' ? '👨‍🏫' : '👩‍🎓'}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-sm font-medium">{recognition.recipient}</p>
-                  <p className="text-xs text-muted-foreground">{recognition.recipient_role}</p>
+                  <p className="text-sm font-medium text-foreground">{rec.recipient}</p>
+                  <p className="text-xs text-muted-foreground">{rec.recipient_role}</p>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+              <div className="flex justify-between text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {recognition.district}
+                  <MapPin className="w-3 h-3" /> {rec.district}
                 </span>
                 <span className="flex items-center gap-1">
-                  <Heart className="w-3 h-3" />
-                  {recognition.likes}
+                  <Heart className="w-3 h-3" /> {rec.likes}
                 </span>
               </div>
-
-              {/* Action Buttons - Role Based */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2 mt-4">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   className="flex-1"
-                  onClick={() => handleLike(recognition.id)}
+                  onClick={() => handleLike(rec.id, rec.likes)}
                 >
-                  <Heart className={cn("w-4 h-4 mr-1", recognition.liked && "fill-red-500 text-red-500")} />
-                  {recognition.liked ? "Liked" : "Like"}
+                  <Heart className="w-4 h-4 mr-1" /> Like
                 </Button>
-
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Share2 className="w-4 h-4 mr-1" />
-                  Share
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => handleShare(rec)}
+                >
+                  <Share2 className="w-4 h-4 mr-1" /> Share
                 </Button>
-
-                {/* Edit/Delete - State only */}
-                {user?.role === 'state' && (
-                  <>
-                    <Button variant="outline" size="sm" className="flex-1">
-                      <Edit className="w-4 h-4 mr-1" />
-                      Edit
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleDelete(recognition.id)}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Delete
-                    </Button>
-                  </>
+                {canDelete && (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={() => handleDelete(rec.id, rec)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 )}
               </div>
             </CardContent>
@@ -558,10 +599,19 @@ const Recognition = ({ lang }: Props) => {
       </div>
 
       {/* Empty State */}
-      {filteredRecognitions.length === 0 && (
-        <div className="text-center py-12">
+      {recognitions.length === 0 && (
+        <div className="text-center py-12 bg-muted/30 rounded-lg">
           <Award className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-foreground font-medium">No recognitions found</p>
+          <p className="text-foreground font-medium">No recognitions yet</p>
+          {canCreate && (
+            <Button 
+              onClick={openCreateForm} 
+              className="mt-4 bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First Recognition
+            </Button>
+          )}
         </div>
       )}
     </div>

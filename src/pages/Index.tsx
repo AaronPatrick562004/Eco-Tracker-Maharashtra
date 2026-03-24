@@ -1,160 +1,418 @@
-import React, { useState, useEffect } from "react";
-import { School, ClipboardList, CheckCircle, AlertTriangle } from "lucide-react";
-import MetricCard from "@/components/MetricCard";
-import ComplianceTable from "@/components/ComplianceTable";
-import RecentActivities from "@/components/RecentActivities";
-import DistrictMap from "@/components/DistrictMap";
-import { translations, Language } from "@/lib/translations";
+// src/pages/Index.tsx
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { translations, Language } from '@/lib/translations';
+import { CheckCircle, XCircle, ShieldCheck, Eye } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+
+interface DashboardStats {
+  totalSchools: number;
+  totalActivities: number;
+  complianceRate: number;
+  schoolsAtRisk: number;
+  pendingApprovals: number;
+  greenSchools: number;
+  amberSchools: number;
+}
+
+interface RecentActivity {
+  id: string;
+  title: string;
+  type: string;
+  school_name: string;
+  date: string;
+  students_participated: number;
+  status: string;
+  created_at: string;
+}
 
 interface Props {
   lang: Language;
-  searchQuery?: string;
 }
 
-const Index = ({ lang, searchQuery = "" }: Props) => {
+const Index = ({ lang }: Props) => {
   const t = translations[lang];
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  const { user } = useAuth();
+  
+  const [stats, setStats] = useState<DashboardStats>({
+    totalSchools: 0,
+    totalActivities: 0,
+    complianceRate: 0,
+    schoolsAtRisk: 0,
+    pendingApprovals: 0,
+    greenSchools: 0,
+    amberSchools: 0
+  });
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<RecentActivity | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  const canApprove = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
+  const canVerify = user?.role === 'state';
+  const canReject = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
 
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    fetchDashboardData();
+    
+    const subscription = supabase
+      .channel('dashboard-activities')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'activities' },
+        () => {
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Determine if mobile based on window width
-  const isMobile = windowWidth < 768;
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data: schools, error: schoolsError } = await supabase
+        .from('schools')
+        .select('compliance');
+      
+      if (schoolsError) throw schoolsError;
+      
+      const { count: totalSchools } = await supabase
+        .from('schools')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: totalActivities } = await supabase
+        .from('activities')
+        .select('*', { count: 'exact', head: true });
+      
+      const { count: pendingApprovals } = await supabase
+        .from('activities')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      
+      const greenSchools = schools?.filter(s => s.compliance === 'green').length || 0;
+      const amberSchools = schools?.filter(s => s.compliance === 'amber').length || 0;
+      const atRiskSchools = schools?.filter(s => s.compliance === 'red').length || 0;
+      const complianceRate = (totalSchools || 0) > 0 ? (greenSchools / (totalSchools || 1)) * 100 : 0;
+      
+      setStats({
+        totalSchools: totalSchools || 0,
+        totalActivities: totalActivities || 0,
+        complianceRate: Math.round(complianceRate * 10) / 10,
+        schoolsAtRisk: atRiskSchools,
+        pendingApprovals: pendingApprovals || 0,
+        greenSchools,
+        amberSchools
+      });
+      
+      const { data: recent } = await supabase
+        .from('activities')
+        .select('id, title, type, school_name, date, students_participated, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      setRecentActivities(recent || []);
+      
+    } catch (err: any) {
+      console.error('Error fetching dashboard:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateActivityStatus = async (id: string, newStatus: string) => {
+    setActionLoading(id);
+    try {
+      const { error } = await supabase
+        .from('activities')
+        .update({ status: newStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      await fetchDashboardData();
+      
+      const statusMessages: Record<string, string> = {
+        approved: '✅ Activity approved!',
+        verified: '✅ Activity verified by State Officer!',
+        rejected: '❌ Activity rejected'
+      };
+      alert(statusMessages[newStatus] || `✅ Activity ${newStatus}!`);
+      
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      alert('❌ Failed to update status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const viewActivityDetails = (activity: RecentActivity) => {
+    setSelectedActivity(activity);
+    setShowDetailsModal(true);
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'verified':
+        return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+      case 'approved':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'rejected':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600">Error: {error}</p>
+          <button onClick={fetchDashboardData} className="mt-2 px-4 py-2 bg-red-600 text-white rounded">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Main Content - Responsive padding */}
-      <div className={`${isMobile ? 'p-3' : 'p-4 sm:p-6'} space-y-4 sm:space-y-6`}>
-        
-        {/* Header Section */}
-        <div className="mb-4 sm:mb-6">
-          <h1 className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-bold text-foreground`}>
-            {t.dashboardTitle || 'Dashboard'}
-          </h1>
-          <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-muted-foreground mt-1`}>
-            {t.dashboardSubtitle || 'Environmental education tracking across Maharashtra'}
-          </p>
-        </div>
+    <div className="p-4 sm:p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">EcoTrack Maharashtra</h1>
+        <p className="text-muted-foreground mt-1">
+          Welcome back, {user?.name || 'User'} ({user?.role?.toUpperCase() || 'Guest'})
+        </p>
+      </div>
 
-        {/* Metrics Cards - Always stack vertically on mobile */}
-        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-          {/* Card 1 */}
-          <div className="bg-card rounded-xl border border-border shadow-card p-4 hover:shadow-lg transition-all">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t.registeredSchools || 'Registered Schools'}</p>
-                <p className="text-2xl font-bold text-foreground mt-1">75,420</p>
-                <p className="text-sm text-green-600 mt-1">+1,230 ↑</p>
-              </div>
-              <div className="p-3 bg-green-500/10 rounded-xl">
-                <School className="w-5 h-5 text-green-600" />
-              </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Total Schools" value={stats.totalSchools} icon="🏫" color="bg-blue-500" />
+        <StatCard title="Total Activities" value={stats.totalActivities} icon="🌱" color="bg-green-500" />
+        <StatCard title="Compliance Rate" value={`${stats.complianceRate}%`} icon="📊" color="bg-purple-500" />
+        <StatCard title="Schools at Risk" value={stats.schoolsAtRisk} icon="⚠️" color="bg-red-500" />
+      </div>
+
+      {/* Compliance Summary */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h3 className="font-semibold mb-3">Compliance Summary</h3>
+        <div className="space-y-2">
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-green-600">Green (Compliant)</span>
+              <span>{stats.greenSchools} schools</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div className="bg-green-500 h-2 rounded-full" style={{ width: `${(stats.greenSchools / stats.totalSchools) * 100}%` }} />
             </div>
           </div>
-
-          {/* Card 2 */}
-          <div className="bg-card rounded-xl border border-border shadow-card p-4 hover:shadow-lg transition-all">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t.activitiesThisMonth || 'Activities This Month'}</p>
-                <p className="text-2xl font-bold text-foreground mt-1">12,847</p>
-                <p className="text-sm text-green-600 mt-1">+18% ↑</p>
-              </div>
-              <div className="p-3 bg-sky-500/10 rounded-xl">
-                <ClipboardList className="w-5 h-5 text-sky-600" />
-              </div>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-yellow-600">Amber (Partial)</span>
+              <span>{stats.amberSchools} schools</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${(stats.amberSchools / stats.totalSchools) * 100}%` }} />
             </div>
           </div>
-
-          {/* Card 3 */}
-          <div className="bg-card rounded-xl border border-border shadow-card p-4 hover:shadow-lg transition-all">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t.complianceRate || 'Compliance Rate'}</p>
-                <p className="text-2xl font-bold text-foreground mt-1">78.3%</p>
-                <p className="text-sm text-green-600 mt-1">+2.1% ↑</p>
-              </div>
-              <div className="p-3 bg-primary/10 rounded-xl">
-                <CheckCircle className="w-5 h-5 text-primary" />
-              </div>
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-red-600">Red (At Risk)</span>
+              <span>{stats.schoolsAtRisk} schools</span>
             </div>
-          </div>
-
-          {/* Card 4 */}
-          <div className="bg-card rounded-xl border border-border shadow-card p-4 hover:shadow-lg transition-all">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">{t.schoolsAtRisk || 'Schools At Risk'}</p>
-                <p className="text-2xl font-bold text-foreground mt-1">4,312</p>
-                <p className="text-sm text-green-600 mt-1">-540 ↑</p>
-              </div>
-              <div className="p-3 bg-amber-500/10 rounded-xl">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div className="bg-red-500 h-2 rounded-full" style={{ width: `${(stats.schoolsAtRisk / stats.totalSchools) * 100}%` }} />
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Two Column Section - Stack on mobile */}
-        <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-6">
-          {/* Left Column - Compliance Table (takes 2/3 on desktop) */}
-          <div className="sm:col-span-2">
-            <ComplianceTable lang={lang} searchQuery={searchQuery} />
-          </div>
-          
-          {/* Right Column - Recent Activities (takes 1/3 on desktop) */}
-          <div className="sm:col-span-1">
-            <RecentActivities lang={lang} />
-          </div>
-        </div>
-
-        {/* Bottom Section - Stack on mobile */}
-        <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-6">
-          {/* District Map */}
-          <DistrictMap lang={lang} />
-          
-          {/* Rollout Progress */}
-          <div className="bg-card rounded-xl border border-border shadow-card p-5">
-            <h3 className="font-semibold text-foreground mb-4 text-base sm:text-lg">
-              {t.rolloutProgress || 'Rollout Progress'}
-            </h3>
-            <div className="space-y-4">
-              {[
-                { phase: t.phase1 || 'Phase 1 — Pilot (2 Districts)', progress: 100, status: t.complete || 'Complete' },
-                { phase: t.phase2 || 'Phase 2 — Expand to 8 Districts', progress: 72, status: t.inProgress || 'In Progress' },
-                { phase: t.phase3 || 'Phase 3 — 18 Districts', progress: 15, status: t.starting || 'Starting' },
-                { phase: t.phase4 || 'Phase 4 — 30 Districts', progress: 0, status: t.planned || 'Planned' },
-                { phase: t.phase5 || 'Phase 5 — Statewide (36 Districts)', progress: 0, status: t.planned || 'Planned' },
-              ].map((p, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-xs sm:text-sm mb-1.5">
-                    <span className="font-medium text-foreground">{p.phase}</span>
-                    <span className="text-muted-foreground text-xs">{p.status}</span>
+      {/* Recent Activities */}
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h3 className="font-semibold mb-4">Recent Eco Activities</h3>
+        {recentActivities.length === 0 ? (
+          <p className="text-muted-foreground text-center py-8">No activities yet</p>
+        ) : (
+          <div className="space-y-4">
+            {recentActivities.map((activity) => (
+              <div key={activity.id} className="border-b border-border pb-4 last:border-b-0">
+                {/* Activity Header */}
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground">{activity.title}</h4>
+                    <p className="text-sm text-muted-foreground">{activity.school_name}</p>
+                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>📅 {new Date(activity.date).toLocaleDateString()}</span>
+                      <span>👥 {activity.students_participated} students</span>
+                    </div>
                   </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-700"
-                      style={{ width: `${p.progress}%` }}
-                    />
+                  
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(activity.status)}`}>
+                      {activity.status}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Debug info - Remove after testing */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="fixed bottom-2 right-2 bg-black text-white text-xs p-2 rounded opacity-50">
-            Width: {windowWidth}px | {isMobile ? 'Mobile' : 'Desktop'}
+                
+                {/* Status Action Buttons */}
+                <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-border/50">
+                  
+                  {/* Approve Button */}
+                  {canApprove && (
+                    <button
+                      onClick={() => updateActivityStatus(activity.id, 'approved')}
+                      disabled={actionLoading === activity.id}
+                      className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      Approve
+                    </button>
+                  )}
+                  
+                  {/* Verify Button */}
+                  {canVerify && (
+                    <button
+                      onClick={() => updateActivityStatus(activity.id, 'verified')}
+                      disabled={actionLoading === activity.id}
+                      className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      Verify
+                    </button>
+                  )}
+                  
+                  {/* Reject Button */}
+                  {canReject && (
+                    <button
+                      onClick={() => updateActivityStatus(activity.id, 'rejected')}
+                      disabled={actionLoading === activity.id}
+                      className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <XCircle className="w-3 h-3" />
+                      Reject
+                    </button>
+                  )}
+                  
+                  {/* View Button - WORKING NOW */}
+                  <button
+                    onClick={() => viewActivityDetails(activity)}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 ml-auto"
+                  >
+                    <Eye className="w-3 h-3" />
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* Activity Details Modal */}
+      {showDetailsModal && selectedActivity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Activity Details</h2>
+              <button 
+                onClick={() => setShowDetailsModal(false)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Title</label>
+                <p className="text-lg font-semibold">{selectedActivity.title}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Type</label>
+                  <p className="capitalize">{selectedActivity.type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <p className={`capitalize font-medium ${
+                    selectedActivity.status === 'verified' ? 'text-green-600' :
+                    selectedActivity.status === 'approved' ? 'text-blue-600' :
+                    selectedActivity.status === 'pending' ? 'text-yellow-600' :
+                    'text-red-600'
+                  }`}>
+                    {selectedActivity.status}
+                  </p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">School</label>
+                <p>{selectedActivity.school_name}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Date</label>
+                  <p>{new Date(selectedActivity.date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Students Participated</label>
+                  <p>{selectedActivity.students_participated} students</p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Created At</label>
+                <p>{new Date(selectedActivity.created_at).toLocaleString()}</p>
+              </div>
+              
+              <div className="pt-4 border-t">
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+const StatCard = ({ title, value, icon, color }: any) => (
+  <div className="bg-card rounded-xl border border-border p-4">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="text-2xl font-bold mt-1">{value}</p>
+      </div>
+      <div className={`${color} text-white p-3 rounded-full text-xl`}>{icon}</div>
+    </div>
+  </div>
+);
 
 export default Index;

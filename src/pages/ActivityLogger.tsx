@@ -1,62 +1,41 @@
-import { useState } from "react";
-import { Camera, MapPin, Calendar, Upload, TreePine, Droplets, Recycle, Wind, Sun, Plus, Filter, X, CheckCircle, AlertCircle, Clock, Download, Eye, Edit } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { translations, Language } from "@/lib/translations";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useAuth } from "@/lib/auth-context";
-
-const activityTypes = [
-  { id: "plantation", icon: TreePine, label: "Tree Plantation", labelMr: "वृक्षारोपण", color: "bg-eco-green-light text-eco-green" },
-  { id: "water", icon: Droplets, label: "Water Conservation", labelMr: "जलसंधारण", color: "bg-eco-sky-light text-eco-sky" },
-  { id: "waste", icon: Recycle, label: "Waste Management", labelMr: "कचरा व्यवस्थापन", color: "bg-eco-amber-light text-eco-amber" },
-  { id: "air", icon: Wind, label: "Clean Air", labelMr: "स्वच्छ हवा", color: "bg-muted text-muted-foreground" },
-  { id: "energy", icon: Sun, label: "Energy Saving", labelMr: "ऊर्जा बचत", color: "bg-eco-amber-light text-eco-amber" },
-];
+// src/pages/ActivityLogger.tsx
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { translations, Language } from '@/lib/translations';
+import { Camera, Plus, CheckCircle, XCircle, Search, Filter, Calendar, Users, School, Eye, ShieldCheck, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 interface Activity {
   id: string;
-  type: string;
   title: string;
-  school: string;
-  schoolId: string;
+  type: string;
+  school_id: string;
+  school_name: string;
   date: string;
-  students: number;
-  photos: number;
-  gps: string;
-  status: "pending" | "approved" | "rejected";
+  students_participated: number;
+  photos_count: number;
+  description: string;
+  status: string;
+  created_at: string;
 }
 
-const mockActivities: Activity[] = [
-  { id: "1", type: "plantation", title: "Tree Plantation Drive — 50 saplings", school: "ZP School, Shirdi", schoolId: "1", date: "2025-02-23", students: 45, photos: 4, gps: "19.7668° N, 74.4782° E", status: "approved" },
-  { id: "2", type: "water", title: "Rainwater Harvesting Workshop", school: "Municipal School, Pune", schoolId: "2", date: "2025-02-22", students: 60, photos: 3, gps: "18.5204° N, 73.8567° E", status: "pending" },
-  { id: "3", type: "waste", title: "Plastic-Free Week Campaign", school: "Govt. HS, Nagpur", schoolId: "4", date: "2025-02-21", students: 120, photos: 6, gps: "21.1458° N, 79.0882° E", status: "approved" },
-  { id: "4", type: "air", title: "Clean Air Survey & Monitoring", school: "KV, Thane", schoolId: "6", date: "2025-02-20", students: 30, photos: 2, gps: "19.2183° N, 72.9781° E", status: "approved" },
-  { id: "5", type: "energy", title: "Solar Energy Awareness Day", school: "Navodaya, Satara", schoolId: "8", date: "2025-02-19", students: 80, photos: 5, gps: "17.6805° N, 73.9998° E", status: "rejected" },
-  { id: "6", type: "plantation", title: "School Garden Project Phase 2", school: "Adarsh Vidyalaya, Kolhapur", schoolId: "5", date: "2025-02-18", students: 35, photos: 3, gps: "16.7050° N, 74.2433° E", status: "pending" },
-];
+interface School {
+  id: string;
+  name: string;
+  district: string;
+}
 
-const statusStyles = {
-  pending: { 
-    label: "Pending", 
-    labelMr: "प्रलंबित",
-    className: "bg-eco-amber-light text-eco-amber",
-    icon: Clock
-  },
-  approved: { 
-    label: "Approved", 
-    labelMr: "मंजूर",
-    className: "bg-eco-green-light text-eco-green",
-    icon: CheckCircle
-  },
-  rejected: { 
-    label: "Rejected", 
-    labelMr: "नाकारले",
-    className: "bg-eco-red-light text-eco-red",
-    icon: AlertCircle
-  },
-};
+const activityTypes = [
+  { id: 'plantation', label: 'Tree Plantation', labelMr: 'वृक्षारोपण', icon: '🌳', color: 'bg-green-100 text-green-700' },
+  { id: 'water', label: 'Water Conservation', labelMr: 'जलसंधारण', icon: '💧', color: 'bg-blue-100 text-blue-700' },
+  { id: 'waste', label: 'Waste Management', labelMr: 'कचरा व्यवस्थापन', icon: '♻️', color: 'bg-amber-100 text-amber-700' },
+  { id: 'air', label: 'Clean Air', labelMr: 'स्वच्छ हवा', icon: '🌬️', color: 'bg-purple-100 text-purple-700' },
+  { id: 'energy', label: 'Energy Saving', labelMr: 'उर्जा बचत', icon: '⚡', color: 'bg-yellow-100 text-yellow-700' },
+];
 
 interface Props {
   lang: Language;
@@ -64,156 +43,257 @@ interface Props {
 
 const ActivityLogger = ({ lang }: Props) => {
   const t = translations[lang];
-  const isMobile = useIsMobile();
-  const { user } = useAuth();
-  const [activeType, setActiveType] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const { user, hasPermission } = useAuth();
+  
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    type: 'plantation',
+    school_id: '',
+    date: new Date().toISOString().split('T')[0],
+    students_participated: 0,
+    description: ''
+  });
 
-  // Filter activities based on role
-  const filtered = mockActivities
-    .filter((a) => !activeType || a.type === activeType)
-    .filter((a) => 
-      a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.school.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .filter((a) => {
-      // Role-based filtering
-      if (user?.role === 'principal') {
-        return a.school === user.school; // Principal sees only their school
+  // Permission checks based on user role
+  const canCreate = hasPermission('create', 'activities');
+  const canApprove = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
+  const canVerify = user?.role === 'state';
+  const canReject = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
+  const canDelete = hasPermission('delete', 'activities');
+
+  useEffect(() => {
+    fetchData();
+    
+    const subscription = supabase
+      .channel('activities-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'activities' },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Use DISTINCT to avoid duplicates, order by date
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('activities')
+        .select('*')
+        .order('date', { ascending: false });
+      
+      if (activitiesError) throw activitiesError;
+      
+      // Remove duplicates by id (in case of any)
+      const uniqueActivities = activitiesData?.filter((activity, index, self) => 
+        index === self.findIndex(a => a.id === activity.id)
+      ) || [];
+      
+      setActivities(uniqueActivities);
+      
+      const { data: schoolsData, error: schoolsError } = await supabase
+        .from('schools')
+        .select('id, name, district')
+        .order('name');
+      
+      if (schoolsError) throw schoolsError;
+      
+      setSchools(schoolsData || []);
+      
+    } catch (err: any) {
+      console.error('Error fetching data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateActivityStatus = async (id: string, newStatus: string) => {
+    setActionLoading(id);
+    try {
+      console.log(`Updating activity ${id} to status: ${newStatus}`);
+      
+      const { error } = await supabase
+        .from('activities')
+        .update({ status: newStatus })
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
       }
-      if (user?.role === 'beo' && user?.block) {
-        return a.school.includes(user.block); // BEO sees their block
-      }
-      if (user?.role === 'deo' && user?.district) {
-        return a.school.includes(user.district); // DEO sees their district
-      }
-      return true; // State sees all
+      
+      console.log('Update successful!');
+      
+      // Refresh data
+      await fetchData();
+      
+      const statusMessages: Record<string, string> = {
+        approved: '✅ Activity approved!',
+        verified: '✅ Activity verified by State Officer!',
+        rejected: '❌ Activity rejected'
+      };
+      alert(statusMessages[newStatus] || `✅ Activity ${newStatus}!`);
+      
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      alert('❌ Failed to update status: ' + (error.message || 'Unknown error'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (id: string, schoolName: string) => {
+    if (!canDelete) {
+      alert('You do not have permission to delete activities');
+      return;
+    }
+    
+    if (user?.role === 'principal' && user?.school !== schoolName) {
+      alert('You can only delete activities from your own school');
+      return;
+    }
+    
+    if (!confirm('⚠️ Are you sure you want to delete this activity? This action cannot be undone.')) return;
+    
+    setActionLoading(id);
+    try {
+      const { error } = await supabase.from('activities').delete().eq('id', id);
+      if (error) throw error;
+      alert('✅ Activity deleted successfully!');
+      await fetchData();
+    } catch (err: any) {
+      alert('❌ Failed to delete: ' + err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const viewActivityDetails = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setShowDetailsModal(true);
+  };
+
+  const filteredActivities = activities.filter(activity => {
+    const matchesSearch = activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         activity.school_name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = selectedType === 'all' || activity.type === selectedType;
+    const matchesStatus = selectedStatus === 'all' || activity.status === selectedStatus;
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'students_participated' ? parseInt(value) || 0 : value
+    }));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      type: 'plantation',
+      school_id: '',
+      date: new Date().toISOString().split('T')[0],
+      students_participated: 0,
+      description: ''
     });
+    setShowForm(false);
+    setError(null);
+  };
 
-  const getStatusDisplay = (status: string) => {
-    const config = statusStyles[status as keyof typeof statusStyles];
-    const Icon = config.icon;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    
+    try {
+      if (!formData.title.trim()) throw new Error('Please enter an activity title');
+      if (!formData.school_id) throw new Error('Please select a school');
+      
+      const selectedSchool = schools.find(s => s.id === formData.school_id);
+      
+      const { error } = await supabase
+        .from('activities')
+        .insert([{
+          title: formData.title.trim(),
+          type: formData.type,
+          school_id: formData.school_id,
+          school_name: selectedSchool?.name,
+          date: formData.date,
+          students_participated: formData.students_participated,
+          description: formData.description.trim(),
+          status: 'pending',
+          created_by: user?.id,
+          created_at: new Date().toISOString()
+        }]);
+      
+      if (error) throw error;
+      
+      alert('✅ Activity submitted successfully!');
+      resetForm();
+      await fetchData();
+      
+    } catch (err: any) {
+      setError(err.message);
+      alert('❌ Failed to submit: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'verified':
+        return <Badge className="bg-green-100 text-green-700">✅ Verified</Badge>;
+      case 'approved':
+        return <Badge className="bg-blue-100 text-blue-700">✓ Approved</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-700">⏳ Pending</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-100 text-red-700">✗ Rejected</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-700">{status}</Badge>;
+    }
+  };
+
+  const getTypeBadge = (type: string) => {
+    const typeInfo = activityTypes.find(t => t.id === type);
     return (
-      <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1", config.className)}>
-        <Icon className="w-3 h-3" />
-        {lang === "en" ? config.label : config.labelMr}
-      </span>
+      <Badge className={`${typeInfo?.color} hover:${typeInfo?.color}`}>
+        {typeInfo?.icon} {typeInfo?.label}
+      </Badge>
     );
   };
 
-  // Form for logging new activity (Only Principals see this)
-  if (showForm && user?.role === 'principal') {
+  if (loading) {
     return (
-      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-        <button
-          onClick={() => setShowForm(false)}
-          className="flex items-center gap-2 text-muted-foreground mb-2"
-        >
-          <X className="w-5 h-5" />
-          <span>{lang === "en" ? "Back to activities" : "उपक्रमांकडे परत"}</span>
-        </button>
-
-        <div className="bg-card rounded-xl border border-border shadow-card p-4 sm:p-6">
-          <h3 className="text-lg sm:text-xl font-bold text-foreground mb-4">
-            {lang === "en" ? "Log New Activity" : "नवीन उपक्रम नोंदवा"}
-          </h3>
-          
-          <form className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">
-                {lang === "en" ? "Activity Type" : "उपक्रमाचा प्रकार"}
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {activityTypes.map((type) => (
-                  <button
-                    key={type.id}
-                    type="button"
-                    className="flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors hover:bg-muted"
-                  >
-                    <type.icon className="w-5 h-5" />
-                    <span className="text-xs">{lang === "en" ? type.label : type.labelMr}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">
-                {lang === "en" ? "Activity Title" : "उपक्रमाचे शीर्षक"}
-              </label>
-              <Input
-                placeholder={lang === "en" ? "e.g., Tree Plantation Drive" : "उदा., वृक्षारोपण मोहीम"}
-                className="w-full"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-1.5">
-                  {lang === "en" ? "Date" : "तारीख"}
-                </label>
-                <Input type="date" className="w-full" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground block mb-1.5">
-                  {lang === "en" ? "Number of Students" : "विद्यार्थी संख्या"}
-                </label>
-                <Input type="number" placeholder="e.g., 50" className="w-full" />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">
-                {lang === "en" ? "Location" : "स्थान"}
-              </label>
-              <Input
-                placeholder={lang === "en" ? "School campus or specific location" : "शाळा परिसर किंवा विशिष्ट स्थान"}
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">
-                {lang === "en" ? "GPS Coordinates" : "GPS निर्देशांक"}
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder={lang === "en" ? "Auto-detected from your device" : "तुमच्या डिव्हाइसवरून आपोआप मिळाले"}
-                  className="pl-9 w-full"
-                  readOnly
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-foreground block mb-1.5">
-                {lang === "en" ? "Upload Photos" : "फोटो अपलोड करा"}
-              </label>
-              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer">
-                <Camera className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-foreground mb-1">
-                  {lang === "en" ? "Click to upload or drag and drop" : "अपलोड करण्यासाठी क्लिक करा किंवा ड्रॅग आणि ड्रॉप करा"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {lang === "en" ? "PNG, JPG up to 10MB" : "PNG, JPG 10MB पर्यंत"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button className="flex-1 bg-green-600 hover:bg-green-700">
-                <Upload className="w-4 h-4 mr-2" />
-                {lang === "en" ? "Submit Activity" : "उपक्रम सबमिट करा"}
-              </Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>
-                {lang === "en" ? "Cancel" : "रद्द करा"}
-              </Button>
-            </div>
-          </form>
-        </div>
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        <p className="ml-3 text-gray-500">Loading activities...</p>
       </div>
     );
   }
@@ -221,45 +301,29 @@ const ActivityLogger = ({ lang }: Props) => {
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-            {lang === "en" ? "Activity Logger" : "उपक्रम नोंदणी"}
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            {lang === "en" ? "Log and track environmental activities with evidence" : "पुराव्यासह पर्यावरणीय उपक्रम नोंदवा आणि ट्रॅक करा"}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-bold">Activity Logger</h1>
+          <p className="text-sm text-muted-foreground mt-1">Log and track environmental activities</p>
         </div>
         
-        {/* Role-based header buttons */}
-        <div className="flex gap-2">
-          {/* ✅ PRINCIPAL sees Log Activity button */}
-          {user?.role === 'principal' && (
-            <Button 
-              className="gap-2 bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-              onClick={() => setShowForm(true)}
-            >
-              <Plus className="w-4 h-4" />
-              {lang === "en" ? "Log Activity" : "उपक्रम नोंदवा"}
-            </Button>
-          )}
-          
-          {/* ✅ DEO/STATE see Export button */}
-          {(user?.role === 'deo' || user?.role === 'state') && (
-            <Button variant="outline" className="gap-2">
-              <Download className="w-4 h-4" />
-              {lang === "en" ? "Export" : "निर्यात करा"}
-            </Button>
-          )}
-        </div>
+        {canCreate && (
+          <Button 
+            onClick={() => setShowForm(true)} 
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            Log Activity
+          </Button>
+        )}
       </div>
 
-      {/* Search and Filter */}
+      {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Camera className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder={lang === "en" ? "Search activities..." : "उपक्रम शोधा..."}
+            placeholder="Search by title or school..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 w-full"
@@ -267,154 +331,425 @@ const ActivityLogger = ({ lang }: Props) => {
         </div>
         <Button 
           variant="outline" 
-          className="gap-2 w-full sm:w-auto"
           onClick={() => setShowFilters(!showFilters)}
+          className="gap-2 w-full sm:w-auto"
         >
           <Filter className="w-4 h-4" />
-          {lang === "en" ? "Filter" : "फिल्टर"}
+          Filters
         </Button>
       </div>
 
-      {/* Activity Type Filters */}
-      <div className="relative">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <button
-            onClick={() => setActiveType(null)}
-            className={cn(
-              "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors border whitespace-nowrap",
-              !activeType ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border hover:bg-muted"
-            )}
-          >
-            {lang === "en" ? "All Activities" : "सर्व उपक्रम"}
-          </button>
-          {activityTypes.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveType(t.id === activeType ? null : t.id)}
-              className={cn(
-                "flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors border whitespace-nowrap",
-                activeType === t.id ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border hover:bg-muted"
-              )}
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-muted/30 rounded-lg">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Activity Type</label>
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800"
             >
-              <t.icon className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">{lang === "en" ? t.label : t.labelMr}</span>
-              <span className="sm:hidden">{lang === "en" ? t.label.split(' ')[0] : t.labelMr.split(' ')[0]}</span>
-            </button>
-          ))}
+              <option value="all">All Types</option>
+              {activityTypes.map(type => (
+                <option key={type.id} value={type.id}>{type.icon} {type.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Status</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
         </div>
+      )}
+
+      {/* Activities Table - Desktop */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="text-left px-4 py-3">Title</th>
+              <th className="text-left px-4 py-3">Type</th>
+              <th className="text-left px-4 py-3">School</th>
+              <th className="text-left px-4 py-3">Date</th>
+              <th className="text-center px-4 py-3">Students</th>
+              <th className="text-center px-4 py-3">Status</th>
+              <th className="text-center px-4 py-3">Actions</th>
+              </tr>
+          </thead>
+          <tbody>
+            {filteredActivities.map((activity) => (
+              <tr key={activity.id} className="border-t hover:bg-muted/30">
+                <td className="px-4 py-3 font-medium">{activity.title}</td>
+                <td className="px-4 py-3">{getTypeBadge(activity.type)}</td>
+                <td className="px-4 py-3">{activity.school_name}</td>
+                <td className="px-4 py-3">{new Date(activity.date).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-center">{activity.students_participated}</td>
+                <td className="px-4 py-3 text-center">{getStatusBadge(activity.status)}</td>
+                <td className="px-4 py-3 text-center">
+                  <div className="flex gap-2 justify-center flex-wrap">
+                    
+                    {/* Approve Button */}
+                    {canApprove && (
+                      <button 
+                        onClick={() => updateActivityStatus(activity.id, 'approved')} 
+                        disabled={actionLoading === activity.id}
+                        className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                        title="Approve"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    
+                    {/* Verify Button */}
+                    {canVerify && (
+                      <button 
+                        onClick={() => updateActivityStatus(activity.id, 'verified')} 
+                        disabled={actionLoading === activity.id}
+                        className="p-1.5 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors disabled:opacity-50"
+                        title="Verify"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                      </button>
+                    )}
+                    
+                    {/* Reject Button */}
+                    {canReject && (
+                      <button 
+                        onClick={() => updateActivityStatus(activity.id, 'rejected')} 
+                        disabled={actionLoading === activity.id}
+                        className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors disabled:opacity-50"
+                        title="Reject"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    
+                    {/* View Button - WORKING NOW */}
+                    <button 
+                      onClick={() => viewActivityDetails(activity)} 
+                      className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Delete Button */}
+                    {(canDelete || (user?.role === 'principal' && user?.school === activity.school_name)) && (
+                      <button 
+                        onClick={() => handleDelete(activity.id, activity.school_name)} 
+                        disabled={actionLoading === activity.id}
+                        className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors disabled:opacity-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* Activities List */}
-      <div className="space-y-3">
-        {filtered.length > 0 ? (
-          filtered.map((activity) => {
-            const typeInfo = activityTypes.find((t) => t.id === activity.type);
-            const TypeIcon = typeInfo?.icon || TreePine;
-            return (
-              <div
-                key={activity.id}
-                className="bg-card rounded-xl border border-border shadow-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 hover:shadow-elevated transition-shadow"
-              >
-                {/* Icon */}
-                <div className={cn("w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex items-center justify-center shrink-0", typeInfo?.color)}>
-                  <TypeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+      {/* Mobile Card View */}
+      <div className="sm:hidden space-y-3">
+        {filteredActivities.map((activity) => (
+          <Card key={activity.id} className="overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold text-base flex-1">{activity.title}</h3>
+                {getStatusBadge(activity.status)}
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Type:</span>
+                  {getTypeBadge(activity.type)}
                 </div>
-                
-                <div className="flex-1 min-w-0">
-                  {/* Title and Status */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                    <div>
-                      <h4 className="font-semibold text-foreground text-sm sm:text-base">{activity.title}</h4>
-                      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{activity.school}</p>
-                    </div>
-                    <div className="sm:ml-2">
-                      {getStatusDisplay(activity.status)}
-                    </div>
-                  </div>
-                  
-                  {/* Details */}
-                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 mt-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{activity.date}</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{activity.gps}</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5 shrink-0" />
-                      {activity.photos} {lang === "en" ? "photos" : "फोटो"}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-3.5 flex items-center justify-center text-xs">👥</span>
-                      {activity.students} {lang === "en" ? "students" : "विद्यार्थी"}
-                    </span>
-                  </div>
-
-                  {/* Action Buttons - Role Based */}
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {/* View button - Everyone */}
-                    <Button size="sm" variant="ghost">
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
-
-                    {/* ✅ PRINCIPAL can edit THEIR pending activities */}
-                    {user?.role === 'principal' && 
-                     activity.status === 'pending' && 
-                     activity.school === user?.school && (
-                      <Button size="sm" variant="outline" className="text-blue-600">
-                        <Edit className="w-4 h-4 mr-1" />
-                        Edit
-                      </Button>
-                    )}
-
-                    {/* ✅ BEO/DEO/STATE can approve/reject pending activities */}
-                    {(user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state') && 
-                     activity.status === 'pending' && (
-                      <>
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="destructive">
-                          <X className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </>
-                    )}
-
-                    {/* ✅ BEO/DEO/STATE can verify photos */}
-                    {(user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state') && (
-                      <Button size="sm" variant="outline">
-                        <Camera className="w-4 h-4 mr-1" />
-                        Verify Photos
-                      </Button>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <School className="w-4 h-4 text-muted-foreground" />
+                  <span>{activity.school_name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <span>{new Date(activity.date).toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  <span>{activity.students_participated} students</span>
                 </div>
               </div>
-            );
-          })
-        ) : (
-          <div className="text-center py-12 bg-card rounded-xl border border-border">
-            <Camera className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-            <p className="text-foreground font-medium">
-              {lang === "en" ? "No activities found" : "कोणतेही उपक्रम आढळले नाहीत"}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {lang === "en" ? "Try adjusting your filters" : "तुमचे फिल्टर समायोजित करून पहा"}
-            </p>
-          </div>
-        )}
+              
+              {/* Action Buttons - Mobile */}
+              <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t">
+                {canApprove && (
+                  <Button 
+                    onClick={() => updateActivityStatus(activity.id, 'approved')} 
+                    disabled={actionLoading === activity.id}
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-1" /> Approve
+                  </Button>
+                )}
+                
+                {canVerify && (
+                  <Button 
+                    onClick={() => updateActivityStatus(activity.id, 'verified')} 
+                    disabled={actionLoading === activity.id}
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <ShieldCheck className="w-4 h-4 mr-1" /> Verify
+                  </Button>
+                )}
+                
+                {canReject && (
+                  <Button 
+                    onClick={() => updateActivityStatus(activity.id, 'rejected')} 
+                    disabled={actionLoading === activity.id}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    <XCircle className="w-4 h-4 mr-1" /> Reject
+                  </Button>
+                )}
+                
+                {/* View Button for Mobile */}
+                <Button 
+                  onClick={() => viewActivityDetails(activity)} 
+                  variant="outline"
+                  size="sm"
+                >
+                  <Eye className="w-4 h-4 mr-1" /> View
+                </Button>
+                
+                {(canDelete || (user?.role === 'principal' && user?.school === activity.school_name)) && (
+                  <Button 
+                    onClick={() => handleDelete(activity.id, activity.school_name)} 
+                    disabled={actionLoading === activity.id}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" /> Delete
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Load More Button - Only on mobile */}
-      {filtered.length > 5 && isMobile && (
-        <Button variant="outline" className="w-full">
-          {lang === "en" ? "Load More" : "अधिक लोड करा"}
-        </Button>
+      {/* Empty State */}
+      {filteredActivities.length === 0 && (
+        <div className="text-center py-12 bg-muted/30 rounded-lg">
+          <Camera className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+          <p className="text-foreground font-medium">No activities found</p>
+          <p className="text-sm text-muted-foreground mt-1">Try adjusting your filters</p>
+          {canCreate && (
+            <Button 
+              onClick={() => setShowForm(true)} 
+              className="mt-4 bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Log Your First Activity
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Activity Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <h2 className="text-xl font-bold mb-4">Log New Activity</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Activity Title *</label>
+                <Input
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Tree Plantation Drive"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Activity Type *</label>
+                <select
+                  name="type"
+                  value={formData.type}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800"
+                  required
+                >
+                  {activityTypes.map(type => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {lang === 'en' ? type.label : type.labelMr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">School *</label>
+                <select
+                  name="school_id"
+                  value={formData.school_id}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800"
+                  required
+                >
+                  <option value="">Select School</option>
+                  {schools.map(school => (
+                    <option key={school.id} value={school.id}>
+                      {school.name} ({school.district})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Date *</label>
+                  <Input
+                    type="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Students Participated *</label>
+                  <Input
+                    type="number"
+                    name="students_participated"
+                    value={formData.students_participated}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 50"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  rows={3}
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800"
+                  placeholder="Describe the activity..."
+                />
+              </div>
+              
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                </div>
+              )}
+              
+              <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto">Cancel</Button>
+                <Button type="submit" disabled={submitting} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
+                  {submitting ? 'Submitting...' : 'Submit Activity'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Activity Details Modal */}
+      {showDetailsModal && selectedActivity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Activity Details</h2>
+              <button 
+                onClick={() => setShowDetailsModal(false)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Title</label>
+                <p className="text-lg font-semibold">{selectedActivity.title}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Type</label>
+                  <p className="capitalize">{selectedActivity.type}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <p className={`capitalize font-medium ${
+                    selectedActivity.status === 'verified' ? 'text-green-600' :
+                    selectedActivity.status === 'approved' ? 'text-blue-600' :
+                    selectedActivity.status === 'pending' ? 'text-yellow-600' :
+                    'text-red-600'
+                  }`}>
+                    {selectedActivity.status}
+                  </p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">School</label>
+                <p>{selectedActivity.school_name}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Date</label>
+                  <p>{new Date(selectedActivity.date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Students Participated</label>
+                  <p>{selectedActivity.students_participated} students</p>
+                </div>
+              </div>
+              
+              {selectedActivity.description && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Description</label>
+                  <p className="text-gray-700">{selectedActivity.description}</p>
+                </div>
+              )}
+              
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Created At</label>
+                <p>{new Date(selectedActivity.created_at).toLocaleString()}</p>
+              </div>
+              
+              <div className="pt-4 border-t">
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

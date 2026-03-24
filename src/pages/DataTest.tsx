@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { schoolsAPI } from '@/lib/api';  // Change this line
 
 const DataTest = () => {
     const [schools, setSchools] = useState([]);
@@ -18,9 +18,9 @@ const DataTest = () => {
 
     const fetchSchools = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/schools');
-            const data = await response.json();
-            setSchools(data.data || []);
+            // Use your schoolsAPI
+            const data = await schoolsAPI.getAll();
+            setSchools(data || []);
         } catch (error) {
             console.error('Error fetching schools:', error);
         }
@@ -31,18 +31,12 @@ const DataTest = () => {
         setLoading(true);
         
         try {
-            const response = await fetch('http://localhost:5000/api/schools', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formData.name,
-                    district: formData.district,
-                    students: parseInt(formData.students)
-                })
+            const created = await schoolsAPI.create({
+                name: formData.name,
+                district: formData.district,
+                students_count: parseInt(formData.students)
             });
-            
-            const data = await response.json();
-            console.log('School created:', data);
+            console.log('School created:', created);
             
             // Refresh the list
             fetchSchools();

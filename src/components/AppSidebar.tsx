@@ -110,7 +110,7 @@ const AppSidebar = ({ lang }: AppSidebarProps) => {
 
       {/* Footer with version */}
       <div className="p-4 border-t border-[#2a4a3e]">
-        <p className="text-xs text-white/40">© 2024 EcoTrack v1.0</p>
+        <p className="text-xs text-white/40">© 2026 EcoTrack v1.0</p>
       </div>
     </aside>
   );

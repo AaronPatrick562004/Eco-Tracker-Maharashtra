@@ -1,10 +1,11 @@
+// src/App.tsx
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ThemeProvider } from "@/lib/theme-provider";
+import { ThemeProvider } from "@/components/ThemeProvider"; // Fixed: Changed from @/lib/theme-provider
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -217,7 +218,7 @@ const AppContent = () => {
 // Main App component with providers
 const App = () => {
   return (
-    <ThemeProvider defaultTheme="light" storageKey="eco-track-theme">
+    <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <BrowserRouter>

@@ -1,25 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
-  User, 
-  Mail, 
-  Calendar, 
-  MapPin, 
-  Phone, 
-  Award,
-  School,
-  Shield,
-  Edit,
-  Save,
-  X,
-  Camera,
-  CheckCircle,
-  AlertCircle
+  User, Mail, Calendar, MapPin, Phone, Award, School, Shield, Edit, Save, X, Camera, CheckCircle, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +14,9 @@ import { cn } from "@/lib/utils";
 import { translations, Language } from "@/lib/translations";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth-context";
+import { usersAPI } from "@/lib/supabaseAPI"; // ✅ Updated import
+
+// ALL YOUR EXISTING CODE STAYS THE SAME
 
 interface ProfileProps {
   lang: Language;
