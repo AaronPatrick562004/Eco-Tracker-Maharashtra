@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { translations, Language } from '@/lib/translations';
-import { Heart, MessageCircle, Share2, Plus, X, Maximize2, MinusCircle } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Plus, X, Maximize2, MinusCircle, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,9 +37,10 @@ interface Comment {
 
 interface Props {
   lang: Language;
+  searchQuery?: string; // ✅ Add searchQuery prop
 }
 
-const Community = ({ lang }: Props) => {
+const Community = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user } = useAuth();
   
@@ -257,9 +258,9 @@ const Community = ({ lang }: Props) => {
           author: user?.name || user?.email,
           author_role: user?.role,
           author_id: user?.id,
-          school: user?.school || '',        // ✅ Using 'school' from auth context
-          district: user?.district || '',    // ✅ Using 'district' from auth context
-          block: user?.block || '',          // ✅ Using 'block' from auth context
+          school: user?.school || '',
+          district: user?.district || '',
+          block: user?.block || '',
           likes: 0,
           comments_count: 0,
           status: 'active',
@@ -316,6 +317,15 @@ const Community = ({ lang }: Props) => {
     }
   };
 
+  // ✅ Filter posts using searchQuery from TopBar
+  const filteredPosts = posts.filter(post => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return post.title?.toLowerCase().includes(query) ||
+           post.content?.toLowerCase().includes(query) ||
+           post.author?.toLowerCase().includes(query);
+  });
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -331,13 +341,18 @@ const Community = ({ lang }: Props) => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Community</h1>
           <p className="text-muted-foreground mt-1">Share and connect with the eco-community</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Showing results for: "{searchQuery}"
+            </p>
+          )}
         </div>
         <Button onClick={() => setShowForm(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white">
           <Plus className="w-4 h-4" /> Create Post
         </Button>
       </div>
 
-      {/* Create Post Modal */}
+      {/* Create Post Modal - same */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -414,10 +429,10 @@ const Community = ({ lang }: Props) => {
         </div>
       )}
 
-      {/* Posts Feed */}
+      {/* Posts Feed - Using filteredPosts */}
       <div className="space-y-4">
-        {posts.length > 0 ? (
-          posts.map(post => (
+        {filteredPosts.length > 0 ? (
+          filteredPosts.map(post => (
             <Card key={post.id} className="overflow-hidden">
               <CardContent className="p-5">
                 {/* Header */}
@@ -472,7 +487,7 @@ const Community = ({ lang }: Props) => {
                   </div>
                 )}
                 
-                {/* Actions - Working Like, Comment, Share */}
+                {/* Actions */}
                 <div className="flex gap-6 mt-4 pt-3 border-t border-border">
                   <button 
                     onClick={() => handleLike(post.id, post.likes)} 
@@ -482,7 +497,7 @@ const Community = ({ lang }: Props) => {
                     <span className="text-sm">{post.likes} Likes</span>
                   </button>
                   
-                  {/* Comments Button - Opens comment section */}
+                  {/* Comments Button */}
                   <button 
                     onClick={() => {
                       if (showComments === post.id) {
@@ -498,7 +513,7 @@ const Community = ({ lang }: Props) => {
                     <span className="text-sm">{post.comments_count} Comments</span>
                   </button>
                   
-                  {/* Share Button - Working */}
+                  {/* Share Button */}
                   <button 
                     onClick={() => handleShare(post)}
                     className="flex items-center gap-2 text-muted-foreground hover:text-green-500 transition-colors"
@@ -508,12 +523,11 @@ const Community = ({ lang }: Props) => {
                   </button>
                 </div>
                 
-                {/* Comments Section - Fully Working */}
+                {/* Comments Section */}
                 {showComments === post.id && (
                   <div className="mt-4 pt-3 border-t border-border">
                     <h4 className="text-sm font-semibold mb-3">Comments</h4>
                     
-                    {/* Existing Comments */}
                     <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
                       {(comments[post.id] || []).map((comment: Comment) => (
                         <div key={comment.id} className="bg-muted/30 rounded-lg p-3">
@@ -537,7 +551,6 @@ const Community = ({ lang }: Props) => {
                       )}
                     </div>
                     
-                    {/* Add Comment Form */}
                     <div className="flex gap-2">
                       <Input
                         placeholder="Write a comment..."
@@ -566,17 +579,23 @@ const Community = ({ lang }: Props) => {
         ) : (
           <div className="text-center py-12 bg-muted/30 rounded-lg">
             <MessageCircle className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-            <p className="text-foreground font-medium">No posts yet</p>
-            <p className="text-muted-foreground text-sm mt-1">Be the first to share something with the community!</p>
-            <Button onClick={() => setShowForm(true)} className="mt-4 bg-green-600 hover:bg-green-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Create First Post
-            </Button>
+            <p className="text-foreground font-medium">
+              {searchQuery ? `No posts found for "${searchQuery}"` : 'No posts yet'}
+            </p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {searchQuery ? 'Try a different search term' : 'Be the first to share something with the community!'}
+            </p>
+            {!searchQuery && (
+              <Button onClick={() => setShowForm(true)} className="mt-4 bg-green-600 hover:bg-green-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Create First Post
+              </Button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Image Lightbox Modal */}
+      {/* Image Lightbox Modal - same */}
       {lightboxImage && (
         <div 
           className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4"

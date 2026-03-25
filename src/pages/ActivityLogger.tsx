@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { translations, Language } from '@/lib/translations';
-import { Camera, Plus, CheckCircle, XCircle, Search, Filter, Calendar, Users, School, Eye, ShieldCheck, Trash2 } from 'lucide-react';
+import { Camera, Plus, CheckCircle, XCircle, Filter, Calendar, Users, School, Eye, ShieldCheck, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,9 +39,10 @@ const activityTypes = [
 
 interface Props {
   lang: Language;
+  searchQuery?: string;
 }
 
-const ActivityLogger = ({ lang }: Props) => {
+const ActivityLogger = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user, hasPermission } = useAuth();
   
@@ -52,23 +53,29 @@ const ActivityLogger = ({ lang }: Props) => {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const [formData, setFormData] = useState({
     title: '',
     type: 'plantation',
     school_id: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getTodayDate(),
     students_participated: 0,
     description: ''
   });
 
-  // Permission checks based on user role
   const canCreate = hasPermission('create', 'activities');
   const canApprove = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
   const canVerify = user?.role === 'state';
@@ -98,7 +105,6 @@ const ActivityLogger = ({ lang }: Props) => {
       setLoading(true);
       setError(null);
       
-      // Use DISTINCT to avoid duplicates, order by date
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
         .select('*')
@@ -106,7 +112,6 @@ const ActivityLogger = ({ lang }: Props) => {
       
       if (activitiesError) throw activitiesError;
       
-      // Remove duplicates by id (in case of any)
       const uniqueActivities = activitiesData?.filter((activity, index, self) => 
         index === self.findIndex(a => a.id === activity.id)
       ) || [];
@@ -133,21 +138,13 @@ const ActivityLogger = ({ lang }: Props) => {
   const updateActivityStatus = async (id: string, newStatus: string) => {
     setActionLoading(id);
     try {
-      console.log(`Updating activity ${id} to status: ${newStatus}`);
-      
       const { error } = await supabase
         .from('activities')
         .update({ status: newStatus })
         .eq('id', id);
       
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('Update successful!');
-      
-      // Refresh data
       await fetchData();
       
       const statusMessages: Record<string, string> = {
@@ -197,8 +194,10 @@ const ActivityLogger = ({ lang }: Props) => {
   };
 
   const filteredActivities = activities.filter(activity => {
-    const matchesSearch = activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         activity.school_name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = activity.title.toLowerCase().includes(query) ||
+                         activity.school_name.toLowerCase().includes(query);
     const matchesType = selectedType === 'all' || activity.type === selectedType;
     const matchesStatus = selectedStatus === 'all' || activity.status === selectedStatus;
     return matchesSearch && matchesType && matchesStatus;
@@ -212,12 +211,17 @@ const ActivityLogger = ({ lang }: Props) => {
     }));
   };
 
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedDate = e.target.value;
+    setFormData(prev => ({ ...prev, date: selectedDate }));
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
       type: 'plantation',
       school_id: '',
-      date: new Date().toISOString().split('T')[0],
+      date: getTodayDate(),
       students_participated: 0,
       description: ''
     });
@@ -305,6 +309,11 @@ const ActivityLogger = ({ lang }: Props) => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold">Activity Logger</h1>
           <p className="text-sm text-muted-foreground mt-1">Log and track environmental activities</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Showing results for: "{searchQuery}"
+            </p>
+          )}
         </div>
         
         {canCreate && (
@@ -318,21 +327,12 @@ const ActivityLogger = ({ lang }: Props) => {
         )}
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by title or school..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 w-full"
-          />
-        </div>
+      {/* Filters only - Search removed */}
+      <div className="flex justify-end">
         <Button 
           variant="outline" 
           onClick={() => setShowFilters(!showFilters)}
-          className="gap-2 w-full sm:w-auto"
+          className="gap-2"
         >
           <Filter className="w-4 h-4" />
           Filters
@@ -397,8 +397,6 @@ const ActivityLogger = ({ lang }: Props) => {
                 <td className="px-4 py-3 text-center">{getStatusBadge(activity.status)}</td>
                 <td className="px-4 py-3 text-center">
                   <div className="flex gap-2 justify-center flex-wrap">
-                    
-                    {/* Approve Button */}
                     {canApprove && (
                       <button 
                         onClick={() => updateActivityStatus(activity.id, 'approved')} 
@@ -409,8 +407,6 @@ const ActivityLogger = ({ lang }: Props) => {
                         <CheckCircle className="w-4 h-4" />
                       </button>
                     )}
-                    
-                    {/* Verify Button */}
                     {canVerify && (
                       <button 
                         onClick={() => updateActivityStatus(activity.id, 'verified')} 
@@ -421,8 +417,6 @@ const ActivityLogger = ({ lang }: Props) => {
                         <ShieldCheck className="w-4 h-4" />
                       </button>
                     )}
-                    
-                    {/* Reject Button */}
                     {canReject && (
                       <button 
                         onClick={() => updateActivityStatus(activity.id, 'rejected')} 
@@ -433,8 +427,6 @@ const ActivityLogger = ({ lang }: Props) => {
                         <XCircle className="w-4 h-4" />
                       </button>
                     )}
-                    
-                    {/* View Button - WORKING NOW */}
                     <button 
                       onClick={() => viewActivityDetails(activity)} 
                       className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
@@ -442,8 +434,6 @@ const ActivityLogger = ({ lang }: Props) => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    
-                    {/* Delete Button */}
                     {(canDelete || (user?.role === 'principal' && user?.school === activity.school_name)) && (
                       <button 
                         onClick={() => handleDelete(activity.id, activity.school_name)} 
@@ -490,7 +480,6 @@ const ActivityLogger = ({ lang }: Props) => {
                 </div>
               </div>
               
-              {/* Action Buttons - Mobile */}
               <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t">
                 {canApprove && (
                   <Button 
@@ -502,7 +491,6 @@ const ActivityLogger = ({ lang }: Props) => {
                     <CheckCircle className="w-4 h-4 mr-1" /> Approve
                   </Button>
                 )}
-                
                 {canVerify && (
                   <Button 
                     onClick={() => updateActivityStatus(activity.id, 'verified')} 
@@ -513,7 +501,6 @@ const ActivityLogger = ({ lang }: Props) => {
                     <ShieldCheck className="w-4 h-4 mr-1" /> Verify
                   </Button>
                 )}
-                
                 {canReject && (
                   <Button 
                     onClick={() => updateActivityStatus(activity.id, 'rejected')} 
@@ -524,8 +511,6 @@ const ActivityLogger = ({ lang }: Props) => {
                     <XCircle className="w-4 h-4 mr-1" /> Reject
                   </Button>
                 )}
-                
-                {/* View Button for Mobile */}
                 <Button 
                   onClick={() => viewActivityDetails(activity)} 
                   variant="outline"
@@ -533,7 +518,6 @@ const ActivityLogger = ({ lang }: Props) => {
                 >
                   <Eye className="w-4 h-4 mr-1" /> View
                 </Button>
-                
                 {(canDelete || (user?.role === 'principal' && user?.school === activity.school_name)) && (
                   <Button 
                     onClick={() => handleDelete(activity.id, activity.school_name)} 
@@ -554,9 +538,13 @@ const ActivityLogger = ({ lang }: Props) => {
       {filteredActivities.length === 0 && (
         <div className="text-center py-12 bg-muted/30 rounded-lg">
           <Camera className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-foreground font-medium">No activities found</p>
-          <p className="text-sm text-muted-foreground mt-1">Try adjusting your filters</p>
-          {canCreate && (
+          <p className="text-foreground font-medium">
+            {searchQuery ? `No activities found for "${searchQuery}"` : 'No activities found'}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {searchQuery ? 'Try a different search term' : 'Try adjusting your filters'}
+          </p>
+          {canCreate && !searchQuery && (
             <Button 
               onClick={() => setShowForm(true)} 
               className="mt-4 bg-green-600 hover:bg-green-700"
@@ -572,7 +560,12 @@ const ActivityLogger = ({ lang }: Props) => {
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-            <h2 className="text-xl font-bold mb-4">Log New Activity</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Log New Activity</h2>
+              <button onClick={() => setShowForm(false)} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Activity Title *</label>
@@ -627,9 +620,14 @@ const ActivityLogger = ({ lang }: Props) => {
                     type="date"
                     name="date"
                     value={formData.date}
-                    onChange={handleInputChange}
+                    onChange={handleDateChange}
+                    min={getTodayDate()}
+                    className="w-full"
                     required
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Only current and future dates are allowed
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Students Participated *</label>
@@ -639,6 +637,7 @@ const ActivityLogger = ({ lang }: Props) => {
                     value={formData.students_participated}
                     onChange={handleInputChange}
                     placeholder="e.g., 50"
+                    min="0"
                     required
                   />
                 </div>
@@ -662,9 +661,9 @@ const ActivityLogger = ({ lang }: Props) => {
                 </div>
               )}
               
-              <div className="flex flex-col sm:flex-row justify-end gap-3">
-                <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto">Cancel</Button>
-                <Button type="submit" disabled={submitting} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
+                <Button type="submit" disabled={submitting} className="bg-green-600 hover:bg-green-700">
                   {submitting ? 'Submitting...' : 'Submit Activity'}
                 </Button>
               </div>
@@ -676,77 +675,98 @@ const ActivityLogger = ({ lang }: Props) => {
       {/* Activity Details Modal */}
       {showDetailsModal && selectedActivity && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Activity Details</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-foreground">Activity Details</h2>
               <button 
                 onClick={() => setShowDetailsModal(false)}
-                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                ✕
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             
-            <div className="space-y-4">
+            <div className="p-6 space-y-5">
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Title</label>
-                <p className="text-lg font-semibold">{selectedActivity.title}</p>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Title</label>
+                <p className="text-xl font-bold text-foreground mt-1">{selectedActivity.title}</p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Type</label>
-                  <p className="capitalize">{selectedActivity.type}</p>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Activity Type</label>
+                  <div className="mt-1">{getTypeBadge(selectedActivity.type)}</div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <p className={`capitalize font-medium ${
-                    selectedActivity.status === 'verified' ? 'text-green-600' :
-                    selectedActivity.status === 'approved' ? 'text-blue-600' :
-                    selectedActivity.status === 'pending' ? 'text-yellow-600' :
-                    'text-red-600'
-                  }`}>
-                    {selectedActivity.status}
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedActivity.status === 'verified' ? 'bg-green-100 text-green-700' :
+                      selectedActivity.status === 'approved' ? 'bg-blue-100 text-blue-700' :
+                      selectedActivity.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {selectedActivity.status === 'verified' && '✅ Verified'}
+                      {selectedActivity.status === 'approved' && '✓ Approved'}
+                      {selectedActivity.status === 'pending' && '⏳ Pending'}
+                      {selectedActivity.status === 'rejected' && '✗ Rejected'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">School</label>
+                <p className="text-base text-foreground mt-1 flex items-center gap-2">
+                  <School className="w-4 h-4 text-muted-foreground" />
+                  {selectedActivity.school_name}
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</label>
+                  <p className="text-base text-foreground mt-1 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    {new Date(selectedActivity.date).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">School</label>
-                <p>{selectedActivity.school_name}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Date</label>
-                  <p>{new Date(selectedActivity.date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Students Participated</label>
-                  <p>{selectedActivity.students_participated} students</p>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Students Participated</label>
+                  <p className="text-base text-foreground mt-1 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-semibold text-green-600">{selectedActivity.students_participated}</span> students
+                  </p>
                 </div>
               </div>
               
               {selectedActivity.description && (
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Description</label>
-                  <p className="text-gray-700">{selectedActivity.description}</p>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</label>
+                  <div className="mt-2 p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                    <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed text-base">
+                      {selectedActivity.description}
+                    </p>
+                  </div>
                 </div>
               )}
               
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Created At</label>
-                <p>{new Date(selectedActivity.created_at).toLocaleString()}</p>
+              <div className="pt-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Created At</label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {new Date(selectedActivity.created_at).toLocaleString()}
+                </p>
               </div>
-              
-              <div className="pt-4 border-t">
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                >
-                  Close
-                </button>
-              </div>
+            </div>
+            
+            <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end">
+              <Button 
+                onClick={() => setShowDetailsModal(false)}
+                variant="outline"
+                className="px-6"
+              >
+                Close
+              </Button>
             </div>
           </div>
         </div>

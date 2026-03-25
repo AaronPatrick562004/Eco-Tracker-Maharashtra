@@ -29,9 +29,10 @@ interface RecentActivity {
 
 interface Props {
   lang: Language;
+  searchQuery: string; // ✅ Add this
 }
 
-const Index = ({ lang }: Props) => {
+const Index = ({ lang, searchQuery }: Props) => {
   const t = translations[lang];
   const { user } = useAuth();
   
@@ -127,6 +128,12 @@ const Index = ({ lang }: Props) => {
       setLoading(false);
     }
   };
+
+  // ✅ Filter activities based on search query
+  const filteredActivities = recentActivities.filter(activity =>
+    activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    activity.school_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const updateActivityStatus = async (id: string, newStatus: string) => {
     setActionLoading(id);
@@ -246,16 +253,17 @@ const Index = ({ lang }: Props) => {
         </div>
       </div>
 
-      {/* Recent Activities */}
+      {/* Recent Activities - FILTERED */}
       <div className="bg-card rounded-xl border border-border p-4">
         <h3 className="font-semibold mb-4">Recent Eco Activities</h3>
-        {recentActivities.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">No activities yet</p>
+        {filteredActivities.length === 0 ? (
+          <p className="text-muted-foreground text-center py-8">
+            {searchQuery ? `No activities found matching "${searchQuery}"` : 'No activities yet'}
+          </p>
         ) : (
           <div className="space-y-4">
-            {recentActivities.map((activity) => (
+            {filteredActivities.map((activity) => (
               <div key={activity.id} className="border-b border-border pb-4 last:border-b-0">
-                {/* Activity Header */}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1">
                     <h4 className="font-medium text-foreground">{activity.title}</h4>
@@ -265,8 +273,6 @@ const Index = ({ lang }: Props) => {
                       <span>👥 {activity.students_participated} students</span>
                     </div>
                   </div>
-                  
-                  {/* Status Badge */}
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(activity.status)}`}>
                       {activity.status}
@@ -274,10 +280,7 @@ const Index = ({ lang }: Props) => {
                   </div>
                 </div>
                 
-                {/* Status Action Buttons */}
                 <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-border/50">
-                  
-                  {/* Approve Button */}
                   {canApprove && (
                     <button
                       onClick={() => updateActivityStatus(activity.id, 'approved')}
@@ -289,7 +292,6 @@ const Index = ({ lang }: Props) => {
                     </button>
                   )}
                   
-                  {/* Verify Button */}
                   {canVerify && (
                     <button
                       onClick={() => updateActivityStatus(activity.id, 'verified')}
@@ -301,7 +303,6 @@ const Index = ({ lang }: Props) => {
                     </button>
                   )}
                   
-                  {/* Reject Button */}
                   {canReject && (
                     <button
                       onClick={() => updateActivityStatus(activity.id, 'rejected')}
@@ -313,7 +314,6 @@ const Index = ({ lang }: Props) => {
                     </button>
                   )}
                   
-                  {/* View Button - WORKING NOW */}
                   <button
                     onClick={() => viewActivityDetails(activity)}
                     className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 ml-auto"

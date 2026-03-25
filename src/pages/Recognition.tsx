@@ -40,6 +40,15 @@ const Recognition = ({ lang }: Props) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // ✅ Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const [formData, setFormData] = useState({
     title: '', 
     description: '', 
@@ -48,7 +57,7 @@ const Recognition = ({ lang }: Props) => {
     school: '', 
     district: '',
     block: '',
-    date: new Date().toISOString().split('T')[0], 
+    date: getTodayDate(), 
     type: 'teacher', 
     category: 'green'
   });
@@ -109,6 +118,12 @@ const Recognition = ({ lang }: Props) => {
     }
   };
 
+  // ✅ Handle date change
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedDate = e.target.value;
+    setFormData(prev => ({ ...prev, date: selectedDate }));
+  };
+
   // ✅ Open form with pre-filled data based on user role
   const openCreateForm = () => {
     // Reset form first
@@ -120,7 +135,7 @@ const Recognition = ({ lang }: Props) => {
       school: '', 
       district: '',
       block: '',
-      date: new Date().toISOString().split('T')[0], 
+      date: getTodayDate(), 
       type: 'teacher', 
       category: 'green'
     });
@@ -186,7 +201,7 @@ const Recognition = ({ lang }: Props) => {
       setShowForm(false);
       setFormData({
         title: '', description: '', recipient: '', recipient_role: '', 
-        school: '', district: '', block: '', date: new Date().toISOString().split('T')[0], 
+        school: '', district: '', block: '', date: getTodayDate(), 
         type: 'teacher', category: 'green'
       });
       fetchRecognitions();
@@ -468,7 +483,7 @@ const Recognition = ({ lang }: Props) => {
                 </div>
               </div>
 
-              {/* Date, Type, Category */}
+              {/* Date, Type, Category - FIXED Date Picker */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -478,9 +493,13 @@ const Recognition = ({ lang }: Props) => {
                     type="date"
                     name="date"
                     value={formData.date}
-                    onChange={(e) => setFormData({...formData, date: e.target.value})}
-                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+                    onChange={handleDateChange}
+                    min={getTodayDate()}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 cursor-pointer"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Only current and future dates are allowed
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { translations, Language } from '@/lib/translations';
-import { Award, Users, Star, BookOpen, Plus, Edit, Trash2, X, Search, Download, AlertTriangle } from 'lucide-react';
+import { Award, Users, Star, BookOpen, Plus, Edit, Trash2, X, Download, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,15 +27,15 @@ interface Student {
 
 interface Props {
   lang: Language;
+  searchQuery?: string;
 }
 
-const EcoPassports = ({ lang }: Props) => {
+const EcoPassports = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user, hasPermission } = useAuth();
   
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -53,7 +53,6 @@ const EcoPassports = ({ lang }: Props) => {
     rank: 'Bronze'
   });
 
-  // ✅ FIX 1: Direct role-based permissions (bypass hasPermission)
   const canCreate = user?.role === 'state' || 
                     user?.role === 'deo' || 
                     user?.role === 'beo' ||
@@ -67,7 +66,6 @@ const EcoPassports = ({ lang }: Props) => {
                     user?.role === 'deo' || 
                     user?.role === 'beo';
 
-  // ✅ FIX 2: Auto-fill district and block based on user role
   useEffect(() => {
     if (user?.role === 'beo' && user?.block) {
       setFormData(prev => ({
@@ -111,7 +109,6 @@ const EcoPassports = ({ lang }: Props) => {
       } else if (user?.role === 'deo' && user?.district) {
         query = query.eq('district', user.district);
       }
-      // State sees all (no filter)
       
       const { data, error } = await query.order('points', { ascending: false });
       if (error) throw error;
@@ -132,12 +129,10 @@ const EcoPassports = ({ lang }: Props) => {
       if (!formData.school_name.trim()) throw new Error('School is required');
       if (!formData.district.trim()) throw new Error('District is required');
       
-      // ✅ FIX 3: Validation for BEO - block must match their block
       if (user?.role === 'beo' && formData.block !== user.block) {
         throw new Error(`You can only add students for ${user.block} block`);
       }
       
-      // ✅ FIX 4: Validation for DEO - district must match their district
       if (user?.role === 'deo' && formData.district !== user.district) {
         throw new Error(`You can only add students for ${user.district} district`);
       }
@@ -163,7 +158,6 @@ const EcoPassports = ({ lang }: Props) => {
       if (error) throw error;
       
       setShowForm(false);
-      // Reset form but preserve auto-fill for BEO/DEO
       setFormData({ 
         name: '', 
         class: '', 
@@ -213,7 +207,6 @@ const EcoPassports = ({ lang }: Props) => {
   };
 
   const confirmDelete = (student: Student) => {
-    // ✅ FIX 5: Validate delete permissions
     if (user?.role === 'beo' && student.block !== user.block) {
       alert('❌ You can only delete students from your own block!');
       return;
@@ -254,7 +247,6 @@ const EcoPassports = ({ lang }: Props) => {
     }
   };
 
-  // ========== GENERATE DISTRICT REPORT FUNCTIONALITY ==========
   const generateDistrictReport = async () => {
     try {
       alert('📊 Generating report...');
@@ -376,7 +368,6 @@ EcoTrack Maharashtra - Green Future Initiative
   }
 };
 
-  // ========== DOWNLOAD PASSPORT FUNCTIONALITY ==========
   const getRankIcon = (rank: string) => {
     switch (rank) {
       case 'Platinum': return '💎';
@@ -510,10 +501,12 @@ EcoTrack Maharashtra - Green Future Initiative
     }
   };
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.school_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = students.filter(s => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(query) || 
+           s.school_name.toLowerCase().includes(query);
+  });
 
   if (loading) {
     return (
@@ -530,9 +523,13 @@ EcoTrack Maharashtra - Green Future Initiative
         <div>
           <h1 className="text-2xl font-bold text-foreground">Eco-Passports</h1>
           <p className="text-muted-foreground mt-1">Student eco-passports and achievements</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Showing results for: "{searchQuery}"
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
-          {/* Export Report Button - Visible for DEO and State */}
           {(user?.role === 'deo' || user?.role === 'state') && (
             <Button 
               onClick={generateDistrictReport} 
@@ -543,7 +540,6 @@ EcoTrack Maharashtra - Green Future Initiative
               Export Report
             </Button>
           )}
-          {/* ✅ Add Student Button - Now visible for ALL officers */}
           {canCreate && (
             <Button onClick={() => setShowForm(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white">
               <Plus className="w-4 h-4" /> Add Student
@@ -606,17 +602,6 @@ EcoTrack Maharashtra - Green Future Initiative
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input 
-          placeholder="Search students by name or school..." 
-          value={searchQuery} 
-          onChange={(e) => setSearchQuery(e.target.value)} 
-          className="pl-9 w-full" 
-        />
       </div>
 
       {/* Main Content */}

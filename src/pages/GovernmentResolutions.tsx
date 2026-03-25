@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { translations, Language } from '@/lib/translations';
-import { FileText, Download, Calendar, Tag, Search, Filter, Eye, Bookmark, Plus, Edit, Trash2, X } from 'lucide-react';
+import { FileText, Download, Calendar, Tag, Filter, Eye, Bookmark, Plus, Edit, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,21 +30,22 @@ const categories = [
   { value: "Regulation", label: "⚖️ Regulation", color: "bg-red-100 text-red-700" },
   { value: "Scheme", label: "🎯 Scheme", color: "bg-purple-100 text-purple-700" },
   { value: "Circular", label: "📢 Circular", color: "bg-amber-100 text-amber-700" },
+  { value: "Recognition", label: "🏆 Recognition", color: "bg-pink-100 text-pink-700" },
 ];
 
-const filterCategories = ["All", "Policy", "Guidelines", "Regulation", "Scheme", "Circular"];
+const filterCategories = ["All", "Policy", "Guidelines", "Regulation", "Scheme", "Circular", "Recognition"];
 
 interface Props {
   lang: Language;
+  searchQuery?: string;
 }
 
-const GovernmentResolutions = ({ lang }: Props) => {
+const GovernmentResolutions = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user, hasPermission } = useAuth();
   
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [bookmarked, setBookmarked] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -54,10 +55,18 @@ const GovernmentResolutions = ({ lang }: Props) => {
   const [previewResolution, setPreviewResolution] = useState<Resolution | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const [formData, setFormData] = useState({
     title: '',
     number: '',
-    date: new Date().toISOString().split('T')[0],
+    date: getTodayDate(),
     department: '',
     category: 'Policy',
     description: '',
@@ -109,20 +118,34 @@ const GovernmentResolutions = ({ lang }: Props) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedDate = e.target.value;
+    setFormData(prev => ({ ...prev, date: selectedDate }));
+  };
+
   const handleCreate = async () => {
+    if (!formData.title.trim()) {
+      alert('Please enter a title');
+      return;
+    }
+    if (!formData.number.trim()) {
+      alert('Please enter a resolution number');
+      return;
+    }
+    
     setSubmitting(true);
     try {
       const { error } = await supabase
         .from('resolutions')
         .insert([{
-          title: formData.title,
-          number: formData.number,
+          title: formData.title.trim(),
+          number: formData.number.trim(),
           date: formData.date,
-          department: formData.department,
+          department: formData.department.trim(),
           category: formData.category,
-          description: formData.description,
-          file_url: formData.file_url,
-          tags: formData.tags.split(',').map(t => t.trim()),
+          description: formData.description.trim(),
+          file_url: formData.file_url.trim(),
+          tags: formData.tags.split(',').map(t => t.trim()).filter(t => t),
           downloads: 0,
           is_new: true,
           created_at: new Date().toISOString()
@@ -132,13 +155,14 @@ const GovernmentResolutions = ({ lang }: Props) => {
       
       setShowCreateModal(false);
       setFormData({
-        title: '', number: '', date: new Date().toISOString().split('T')[0],
+        title: '', number: '', date: getTodayDate(),
         department: '', category: 'Policy', description: '', file_url: '', tags: ''
       });
       fetchResolutions();
-      alert('✅ Resolution added!');
+      alert('✅ Resolution added successfully!');
     } catch (err: any) {
-      alert('❌ Failed to add resolution');
+      console.error('Create error:', err);
+      alert('❌ Failed to add resolution: ' + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -151,14 +175,14 @@ const GovernmentResolutions = ({ lang }: Props) => {
       const { error } = await supabase
         .from('resolutions')
         .update({
-          title: formData.title,
-          number: formData.number,
+          title: formData.title.trim(),
+          number: formData.number.trim(),
           date: formData.date,
-          department: formData.department,
+          department: formData.department.trim(),
           category: formData.category,
-          description: formData.description,
-          file_url: formData.file_url,
-          tags: formData.tags.split(',').map(t => t.trim()),
+          description: formData.description.trim(),
+          file_url: formData.file_url.trim(),
+          tags: formData.tags.split(',').map(t => t.trim()).filter(t => t),
         })
         .eq('id', editingResolution.id);
       
@@ -167,23 +191,23 @@ const GovernmentResolutions = ({ lang }: Props) => {
       setShowEditModal(false);
       setEditingResolution(null);
       fetchResolutions();
-      alert('✅ Resolution updated!');
+      alert('✅ Resolution updated successfully!');
     } catch (err: any) {
-      alert('❌ Failed to update');
+      alert('❌ Failed to update: ' + err.message);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this resolution?')) return;
+    if (!confirm('Are you sure you want to delete this resolution?')) return;
     try {
       const { error } = await supabase.from('resolutions').delete().eq('id', id);
       if (error) throw error;
       fetchResolutions();
-      alert('✅ Resolution deleted');
+      alert('✅ Resolution deleted successfully');
     } catch (err: any) {
-      alert('❌ Failed to delete');
+      alert('❌ Failed to delete: ' + err.message);
     }
   };
 
@@ -209,7 +233,6 @@ const GovernmentResolutions = ({ lang }: Props) => {
 
   const handleDownload = async (resolution: Resolution) => {
     try {
-      // Increment download count in database
       const { error } = await supabase
         .from('resolutions')
         .update({ downloads: (resolution.downloads || 0) + 1 })
@@ -217,15 +240,16 @@ const GovernmentResolutions = ({ lang }: Props) => {
       
       if (error) throw error;
       
-      // If there's a file URL, open it in new tab
       if (resolution.file_url) {
         window.open(resolution.file_url, '_blank');
         alert(`📄 Downloading: ${resolution.title}`);
       } else {
-        // If no file URL, create a text file with resolution details
         const content = `
-RESOLUTION DETAILS
-==================
+╔══════════════════════════════════════════════════════════════╗
+║                    GOVERNMENT RESOLUTION                      ║
+║                    ECOTRACK MAHARASHTRA                      ║
+╚══════════════════════════════════════════════════════════════╝
+
 Title: ${resolution.title}
 Number: ${resolution.number}
 Date: ${resolution.date}
@@ -233,10 +257,13 @@ Department: ${resolution.department}
 Category: ${resolution.category}
 Tags: ${resolution.tags?.join(', ') || 'None'}
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 DESCRIPTION:
 ${resolution.description}
 
-----------------------------------------
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Downloaded from EcoTrack Maharashtra
 Date: ${new Date().toLocaleString()}
         `;
@@ -254,7 +281,6 @@ Date: ${new Date().toLocaleString()}
         alert(`✅ Downloaded: ${resolution.title}`);
       }
       
-      // Refresh to update download count
       fetchResolutions();
       
     } catch (err: any) {
@@ -268,8 +294,12 @@ Date: ${new Date().toLocaleString()}
   };
 
   const filteredResolutions = resolutions.filter(res => {
-    const matchesSearch = res.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         res.number.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = res.title.toLowerCase().includes(query) ||
+                         res.number.toLowerCase().includes(query) ||
+                         res.description?.toLowerCase().includes(query) ||
+                         res.department?.toLowerCase().includes(query);
     const matchesCategory = selectedCategory === "All" || res.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -287,11 +317,16 @@ Date: ${new Date().toLocaleString()}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Government Resolutions</h1>
+          <h1 className="text-2xl font-bold text-foreground">Government Resolutions</h1>
           <p className="text-muted-foreground mt-1">Official circulars and guidelines for schools</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Showing results for: "{searchQuery}"
+            </p>
+          )}
         </div>
         {canCreate && (
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2 bg-green-600">
+          <Button onClick={() => setShowCreateModal(true)} className="gap-2 bg-green-600 hover:bg-green-700 text-white">
             <Plus className="w-4 h-4" /> New Resolution
           </Button>
         )}
@@ -299,65 +334,167 @@ Date: ${new Date().toLocaleString()}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2"><div className="p-2 rounded-lg bg-blue-100"><FileText className="w-4 h-4 text-blue-600" /></div><div><p className="text-xs">Total GRs</p><p className="text-xl font-bold">{resolutions.length}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2"><div className="p-2 rounded-lg bg-green-100"><Tag className="w-4 h-4 text-green-600" /></div><div><p className="text-xs">Categories</p><p className="text-xl font-bold">{filterCategories.length - 1}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2"><div className="p-2 rounded-lg bg-amber-100"><Download className="w-4 h-4 text-amber-600" /></div><div><p className="text-xs">Downloads</p><p className="text-xl font-bold">{resolutions.reduce((sum, r) => sum + r.downloads, 0).toLocaleString()}</p></div></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="flex items-center gap-2"><div className="p-2 rounded-lg bg-purple-100"><Calendar className="w-4 h-4 text-purple-600" /></div><div><p className="text-xs">This Month</p><p className="text-xl font-bold">{resolutions.filter(r => new Date(r.date).getMonth() === new Date().getMonth()).length}</p></div></div></CardContent></Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total GRs</p>
+                <p className="text-xl font-bold text-foreground">{resolutions.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <Tag className="w-4 h-4 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Categories</p>
+                <p className="text-xl font-bold text-foreground">{filterCategories.length - 1}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Download className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Downloads</p>
+                <p className="text-xl font-bold text-foreground">{resolutions.reduce((sum, r) => sum + (r.downloads || 0), 0).toLocaleString()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">This Month</p>
+                <p className="text-xl font-bold text-foreground">{resolutions.filter(r => new Date(r.date).getMonth() === new Date().getMonth()).length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         {filterCategories.map(cat => (
-          <Button key={cat} variant={selectedCategory === cat ? "default" : "outline"} size="sm" onClick={() => setSelectedCategory(cat)}>{cat}</Button>
+          <Button 
+            key={cat} 
+            variant={selectedCategory === cat ? "default" : "outline"} 
+            size="sm" 
+            onClick={() => setSelectedCategory(cat)}
+            className={selectedCategory === cat ? "bg-primary text-primary-foreground" : ""}
+          >
+            {cat === "Recognition" ? "🏆 Recognition" : cat}
+          </Button>
         ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search resolutions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
       </div>
 
       {/* Resolutions List */}
       <div className="space-y-3">
-        {filteredResolutions.map(res => (
-          <Card key={res.id} className="hover:shadow-md">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center"><FileText className="w-6 h-6 text-primary" /></div>
-                <div className="flex-1">
-                  <div className="flex justify-between">
-                    <div><h3 className="font-semibold">{res.title}</h3><p className="text-sm text-muted-foreground mt-1 line-clamp-2">{res.description}</p></div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => toggleBookmark(res.id)}><Bookmark className={bookmarked.includes(res.id) ? "fill-current text-yellow-500" : ""} /></Button>
-                      {canEdit && <Button variant="ghost" size="sm" onClick={() => handleEdit(res)}><Edit className="w-4 h-4" /></Button>}
-                      {canDelete && <Button variant="ghost" size="sm" className="text-red-600" onClick={() => handleDelete(res.id)}><Trash2 className="w-4 h-4" /></Button>}
+        {filteredResolutions.length > 0 ? (
+          filteredResolutions.map(res => (
+            <Card key={res.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start flex-wrap gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">{res.title}</h3>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{res.description}</p>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => toggleBookmark(res.id)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Bookmark className={`w-4 h-4 ${bookmarked.includes(res.id) ? "fill-current text-yellow-500" : ""}`} />
+                        </Button>
+                        {canEdit && (
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(res)} className="h-8 w-8 p-0">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => handleDelete(res.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {res.number}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(res.date).toLocaleDateString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Tag className="w-3 h-3" />
+                        {res.department}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Download className="w-3 h-3" />
+                        {res.downloads || 0} downloads
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {res.tags?.map(tag => (
+                        <Badge key={tag} variant="outline" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Button size="sm" variant="outline" onClick={() => handlePreview(res)}>
+                        <Eye className="w-4 h-4 mr-1" /> Preview
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleDownload(res)}>
+                        <Download className="w-4 h-4 mr-1" /> Download ({res.downloads || 0})
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{res.number}</span>
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(res.date).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-1"><Tag className="w-3 h-3" />{res.department}</span>
-                    <span className="flex items-center gap-1"><Download className="w-3 h-3" />{res.downloads} downloads</span>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    {res.tags?.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    {/* Preview Button - WORKING */}
-                    <Button size="sm" variant="outline" onClick={() => handlePreview(res)}>
-                      <Eye className="w-4 h-4 mr-1" /> Preview
-                    </Button>
-                    {/* Download Button - WORKING */}
-                    <Button size="sm" variant="outline" onClick={() => handleDownload(res)}>
-                      <Download className="w-4 h-4 mr-1" /> Download ({res.downloads})
-                    </Button>
-                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center py-12 bg-muted/30 rounded-lg">
+            <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-foreground font-medium">
+              {searchQuery ? `No resolutions found for "${searchQuery}"` : 'No resolutions found'}
+            </p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {searchQuery ? 'Try a different search term' : 'Create your first government resolution'}
+            </p>
+            {canCreate && !searchQuery && (
+              <Button onClick={() => setShowCreateModal(true)} className="mt-4 bg-green-600 hover:bg-green-700">
+                <Plus className="w-4 h-4 mr-2" />
+                Create Resolution
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Preview Modal */}
@@ -365,48 +502,40 @@ Date: ${new Date().toLocaleString()}
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Resolution Preview</h2>
-              <button onClick={() => setShowPreviewModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <h2 className="text-xl font-bold text-foreground">Resolution Preview</h2>
+              <button onClick={() => setShowPreviewModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="space-y-4">
-              {/* Header */}
               <div className="border-b pb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    previewResolution.category === 'Policy' ? 'bg-blue-100 text-blue-700' :
-                    previewResolution.category === 'Guidelines' ? 'bg-green-100 text-green-700' :
-                    previewResolution.category === 'Regulation' ? 'bg-red-100 text-red-700' :
-                    previewResolution.category === 'Scheme' ? 'bg-purple-100 text-purple-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {previewResolution.category}
-                  </span>
+                  <Badge className={categories.find(c => c.value === previewResolution.category)?.color || "bg-gray-100"}>
+                    {previewResolution.category === "Recognition" ? "🏆" : ""} {previewResolution.category}
+                  </Badge>
                   {previewResolution.is_new && (
-                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">New</span>
+                    <Badge className="bg-green-100 text-green-700">New</Badge>
                   )}
                 </div>
-                <h1 className="text-2xl font-bold">{previewResolution.title}</h1>
+                <h1 className="text-2xl font-bold text-foreground">{previewResolution.title}</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   Resolution No: {previewResolution.number}
                 </p>
               </div>
               
-              {/* Meta Info */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
                 <div>
                   <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="font-medium">{new Date(previewResolution.date).toLocaleDateString()}</p>
+                  <p className="font-medium text-foreground">{new Date(previewResolution.date).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Department</p>
-                  <p className="font-medium">{previewResolution.department}</p>
+                  <p className="font-medium text-foreground">{previewResolution.department}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Downloads</p>
-                  <p className="font-medium">{previewResolution.downloads}</p>
+                  <p className="font-medium text-foreground">{previewResolution.downloads}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tags</p>
@@ -418,18 +547,16 @@ Date: ${new Date().toLocaleString()}
                 </div>
               </div>
               
-              {/* Description */}
               <div>
-                <h3 className="font-semibold mb-2">Description</h3>
-                <div className="prose prose-sm max-w-none">
-                  <p className="whitespace-pre-wrap">{previewResolution.description}</p>
+                <h3 className="font-semibold text-foreground mb-2">Description</h3>
+                <div className="bg-muted/20 rounded-lg p-4 whitespace-pre-wrap text-muted-foreground">
+                  {previewResolution.description}
                 </div>
               </div>
               
-              {/* File Link */}
               {previewResolution.file_url && (
                 <div>
-                  <h3 className="font-semibold mb-2">Attached File</h3>
+                  <h3 className="font-semibold text-foreground mb-2">Attached File</h3>
                   <a 
                     href={previewResolution.file_url} 
                     target="_blank" 
@@ -442,7 +569,6 @@ Date: ${new Date().toLocaleString()}
                 </div>
               )}
               
-              {/* Footer */}
               <div className="border-t pt-4 text-xs text-muted-foreground">
                 <p>Source: EcoTrack Maharashtra, Government of Maharashtra</p>
                 <p>Last Updated: {new Date(previewResolution.created_at).toLocaleString()}</p>
@@ -464,38 +590,71 @@ Date: ${new Date().toLocaleString()}
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Create Resolution</h3>
-              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <h3 className="text-xl font-bold text-foreground">Create Resolution</h3>
+              <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Title *</label>
-                <Input name="title" value={formData.title} onChange={handleInputChange} placeholder="e.g., Environmental Education Mandate for All Schools" required />
+                <label className="block text-sm font-medium mb-1 text-foreground">Title *</label>
+                <Input 
+                  name="title" 
+                  value={formData.title} 
+                  onChange={handleInputChange} 
+                  placeholder="e.g., Environmental Education Mandate for All Schools"
+                  className="w-full bg-white dark:bg-gray-800 text-foreground"
+                />
                 <p className="text-xs text-muted-foreground mt-1">Enter a clear, descriptive title for the resolution</p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Number *</label>
-                  <Input name="number" value={formData.number} onChange={handleInputChange} placeholder="e.g., GR-2024-01-001" required />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Number *</label>
+                  <Input 
+                    name="number" 
+                    value={formData.number} 
+                    onChange={handleInputChange} 
+                    placeholder="e.g., GR-2024-01-001"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Date</label>
-                  <Input type="date" name="date" value={formData.date} onChange={handleInputChange} />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Date</label>
+                  <Input 
+                    type="date" 
+                    name="date" 
+                    value={formData.date} 
+                    onChange={handleDateChange}
+                    min={getTodayDate()}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Only current and future dates are allowed
+                  </p>
                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Department</label>
-                  <Input name="department" value={formData.department} onChange={handleInputChange} placeholder="e.g., Education Department" />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Department</label>
+                  <Input 
+                    name="department" 
+                    value={formData.department} 
+                    onChange={handleInputChange} 
+                    placeholder="e.g., Education Department"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Category</label>
-                  <select name="category" value={formData.category} onChange={handleInputChange} className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800">
+                  <label className="block text-sm font-medium mb-1 text-foreground">Category</label>
+                  <select 
+                    name="category" 
+                    value={formData.category} 
+                    onChange={handleInputChange} 
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-foreground"
+                  >
                     {categories.map(cat => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
@@ -504,26 +663,46 @@ Date: ${new Date().toLocaleString()}
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea name="description" value={formData.description} onChange={handleInputChange} rows={5} className="w-full p-3 border rounded-lg resize-y" placeholder="Enter detailed description of the resolution..." />
-                <p className="text-xs text-muted-foreground mt-1">Provide a comprehensive description of the resolution's purpose, scope, and implementation guidelines</p>
+                <label className="block text-sm font-medium mb-1 text-foreground">Description</label>
+                <textarea 
+                  name="description" 
+                  value={formData.description} 
+                  onChange={handleInputChange} 
+                  rows={8} 
+                  className="w-full p-3 border rounded-lg bg-white dark:bg-gray-800 text-foreground resize-y focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter the full text of the government resolution here..."
+                />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">File URL</label>
-                <Input name="file_url" value={formData.file_url} onChange={handleInputChange} placeholder="https://example.com/resolution.pdf" />
+                <label className="block text-sm font-medium mb-1 text-foreground">File URL</label>
+                <Input 
+                  name="file_url" 
+                  value={formData.file_url} 
+                  onChange={handleInputChange} 
+                  placeholder="https://example.com/resolution.pdf"
+                  className="w-full bg-white dark:bg-gray-800 text-foreground"
+                />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">Tags (comma separated)</label>
-                <Input name="tags" value={formData.tags} onChange={handleInputChange} placeholder="education, environment, policy" />
+                <label className="block text-sm font-medium mb-1 text-foreground">Tags (comma separated)</label>
+                <Input 
+                  name="tags" 
+                  value={formData.tags} 
+                  onChange={handleInputChange} 
+                  placeholder="education, environment, policy"
+                  className="w-full bg-white dark:bg-gray-800 text-foreground"
+                />
                 <p className="text-xs text-muted-foreground mt-1">Add relevant keywords to help with search</p>
               </div>
             </div>
             
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="outline" onClick={() => setShowCreateModal(false)}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={submitting} className="bg-green-600">{submitting ? 'Saving...' : 'Create'}</Button>
+              <Button onClick={handleCreate} disabled={submitting} className="bg-green-600 hover:bg-green-700 text-white">
+                {submitting ? 'Creating...' : 'Create Resolution'}
+              </Button>
             </div>
           </div>
         </div>
@@ -534,36 +713,42 @@ Date: ${new Date().toLocaleString()}
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Edit Resolution</h3>
-              <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <h3 className="text-xl font-bold text-foreground">Edit Resolution</h3>
+              <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Title *</label>
-                <Input name="title" value={formData.title} onChange={handleInputChange} required />
+                <label className="block text-sm font-medium mb-1 text-foreground">Title *</label>
+                <Input name="title" value={formData.title} onChange={handleInputChange} className="w-full" />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Number *</label>
-                  <Input name="number" value={formData.number} onChange={handleInputChange} required />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Number *</label>
+                  <Input name="number" value={formData.number} onChange={handleInputChange} className="w-full" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Date</label>
-                  <Input type="date" name="date" value={formData.date} onChange={handleInputChange} />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Date</label>
+                  <Input 
+                    type="date" 
+                    name="date" 
+                    value={formData.date} 
+                    onChange={handleDateChange}
+                    className="w-full"
+                  />
                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Department</label>
-                  <Input name="department" value={formData.department} onChange={handleInputChange} placeholder="e.g., Education Department" />
+                  <label className="block text-sm font-medium mb-1 text-foreground">Department</label>
+                  <Input name="department" value={formData.department} onChange={handleInputChange} className="w-full" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Category</label>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Category</label>
                   <select name="category" value={formData.category} onChange={handleInputChange} className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800">
                     {categories.map(cat => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -573,24 +758,26 @@ Date: ${new Date().toLocaleString()}
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
-                <textarea name="description" value={formData.description} onChange={handleInputChange} rows={5} className="w-full p-3 border rounded-lg resize-y" />
+                <label className="block text-sm font-medium mb-1 text-foreground">Description</label>
+                <textarea name="description" value={formData.description} onChange={handleInputChange} rows={8} className="w-full p-3 border rounded-lg bg-white dark:bg-gray-800 text-foreground resize-y" />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">File URL</label>
-                <Input name="file_url" value={formData.file_url} onChange={handleInputChange} placeholder="https://example.com/resolution.pdf" />
+                <label className="block text-sm font-medium mb-1 text-foreground">File URL</label>
+                <Input name="file_url" value={formData.file_url} onChange={handleInputChange} placeholder="https://example.com/resolution.pdf" className="w-full" />
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-1">Tags (comma separated)</label>
-                <Input name="tags" value={formData.tags} onChange={handleInputChange} placeholder="education, environment, policy" />
+                <label className="block text-sm font-medium mb-1 text-foreground">Tags (comma separated)</label>
+                <Input name="tags" value={formData.tags} onChange={handleInputChange} placeholder="education, environment, policy" className="w-full" />
               </div>
             </div>
             
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
-              <Button onClick={handleUpdate} disabled={submitting} className="bg-green-600">{submitting ? 'Saving...' : 'Save'}</Button>
+              <Button onClick={handleUpdate} disabled={submitting} className="bg-green-600 hover:bg-green-700 text-white">
+                {submitting ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
           </div>
         </div>
