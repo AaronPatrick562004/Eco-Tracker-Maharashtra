@@ -27,9 +27,10 @@ interface MonthlyTrend {
 
 interface Props {
   lang: Language;
+  searchQuery?: string; // ✅ Added searchQuery prop (optional, not used)
 }
 
-const Analytics = ({ lang }: Props) => {
+const Analytics = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   
   const [districts, setDistricts] = useState<District[]>([]);
@@ -46,7 +47,6 @@ const Analytics = ({ lang }: Props) => {
   useEffect(() => {
     fetchData();
     
-    // Real-time subscriptions
     const districtsSubscription = supabase
       .channel('districts-changes')
       .on('postgres_changes', 
@@ -74,7 +74,6 @@ const Analytics = ({ lang }: Props) => {
       setLoading(true);
       setError(null);
       
-      // Fetch REAL districts data from database
       const { data: districtsData, error: districtsError } = await supabase
         .from('districts')
         .select('*')
@@ -82,7 +81,6 @@ const Analytics = ({ lang }: Props) => {
       
       if (districtsError) throw districtsError;
       
-      // Fetch REAL monthly trends from database
       const { data: trendsData, error: trendsError } = await supabase
         .from('monthly_trends')
         .select('*')
@@ -94,7 +92,6 @@ const Analytics = ({ lang }: Props) => {
       setDistricts(districtsData || []);
       setMonthlyTrends(trendsData || []);
       
-      // Calculate totals from districts data
       const totalSchools = districtsData?.reduce((sum, d) => sum + (d.schools_count || 0), 0) || 0;
       const totalActivities = districtsData?.reduce((sum, d) => sum + (d.activities_count || 0), 0) || 0;
       const totalStudents = districtsData?.reduce((sum, d) => sum + (d.students_count || 0), 0) || 0;
@@ -143,13 +140,18 @@ const Analytics = ({ lang }: Props) => {
         <div>
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-muted-foreground mt-1">Comprehensive insights and trends</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Current search: "{searchQuery}" (Analytics page doesn't support search filtering)
+            </p>
+          )}
         </div>
         <Button variant="outline">
           <Download className="w-4 h-4 mr-2" /> Export
         </Button>
       </div>
 
-      {/* Stats Cards - Using REAL data */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -205,7 +207,7 @@ const Analytics = ({ lang }: Props) => {
         </Card>
       </div>
 
-      {/* Monthly Trends Chart - Using REAL data */}
+      {/* Monthly Trends Chart */}
       {monthlyTrends.length > 0 && (
         <Card>
           <CardHeader>
@@ -243,7 +245,7 @@ const Analytics = ({ lang }: Props) => {
         </Card>
       )}
 
-      {/* District Performance Table - Using REAL data */}
+      {/* District Performance Table */}
       <Card>
         <CardHeader>
           <CardTitle>District Performance</CardTitle>

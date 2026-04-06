@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { translations, Language } from '@/lib/translations';
-import { CheckCircle, XCircle, ShieldCheck, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, ShieldCheck, Eye, RefreshCw, Info } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface DashboardStats {
   totalSchools: number;
@@ -29,7 +30,7 @@ interface RecentActivity {
 
 interface Props {
   lang: Language;
-  searchQuery: string; // ✅ Add this
+  searchQuery: string;
 }
 
 const Index = ({ lang, searchQuery }: Props) => {
@@ -51,10 +52,12 @@ const Index = ({ lang, searchQuery }: Props) => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<RecentActivity | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showStatusInfo, setShowStatusInfo] = useState(false);
 
   const canApprove = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
   const canVerify = user?.role === 'state';
   const canReject = user?.role === 'beo' || user?.role === 'deo' || user?.role === 'state';
+  const canUnverify = user?.role === 'state';
 
   useEffect(() => {
     fetchDashboardData();
@@ -129,7 +132,6 @@ const Index = ({ lang, searchQuery }: Props) => {
     }
   };
 
-  // ✅ Filter activities based on search query
   const filteredActivities = recentActivities.filter(activity =>
     activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     activity.school_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -150,7 +152,8 @@ const Index = ({ lang, searchQuery }: Props) => {
       const statusMessages: Record<string, string> = {
         approved: '✅ Activity approved!',
         verified: '✅ Activity verified by State Officer!',
-        rejected: '❌ Activity rejected'
+        rejected: '❌ Activity rejected',
+        pending: '🔄 Activity marked as unverified and moved to pending review'
       };
       alert(statusMessages[newStatus] || `✅ Activity ${newStatus}!`);
       
@@ -168,7 +171,8 @@ const Index = ({ lang, searchQuery }: Props) => {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const lowerStatus = status?.toLowerCase() || '';
+    switch (lowerStatus) {
       case 'verified':
         return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
       case 'approved':
@@ -221,7 +225,74 @@ const Index = ({ lang, searchQuery }: Props) => {
 
       {/* Compliance Summary */}
       <div className="bg-card rounded-xl border border-border p-4">
-        <h3 className="font-semibold mb-3">Compliance Summary</h3>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-semibold">Compliance Summary</h3>
+          <button 
+            onClick={() => setShowStatusInfo(!showStatusInfo)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-blue-600 transition-colors"
+          >
+            <Info className="w-3 h-3" />
+            <span>Status Info</span>
+          </button>
+        </div>
+
+        {showStatusInfo && (
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              Activity Status Definitions
+            </h4>
+            <div className="space-y-3 text-xs">
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-yellow-500 mt-1"></span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-yellow-700 dark:text-yellow-400">Unverified / Pending</span>
+                    <span className="text-muted-foreground text-[10px]">⏳ Awaiting Review</span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">Activity awaiting review by BEO/DEO. No points awarded yet.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-blue-500 mt-1"></span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-blue-700 dark:text-blue-400">Approved</span>
+                    <span className="text-muted-foreground text-[10px]">✓ Approved by BEO/DEO</span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">Approved by BEO/DEO. Points pending State verification.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-green-500 mt-1"></span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-green-700 dark:text-green-400">Verified</span>
+                    <span className="text-muted-foreground text-[10px]">✅ Final Confirmation</span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">State Officer verified. Points awarded to students.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="inline-block w-3 h-3 rounded-full bg-red-500 mt-1"></span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-red-700 dark:text-red-400">Rejected</span>
+                    <span className="text-muted-foreground text-[10px]">❌ Needs Revision</span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">Activity rejected. School can revise and resubmit.</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-blue-200 dark:border-blue-700">
+              <p className="text-[10px] text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" />
+                <span>State Officers can use "Unverify" to revert activities to unverified status.</span>
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <div>
             <div className="flex justify-between text-sm mb-1">
@@ -253,77 +324,126 @@ const Index = ({ lang, searchQuery }: Props) => {
         </div>
       </div>
 
-      {/* Recent Activities - FILTERED */}
-      <div className="bg-card rounded-xl border border-border p-4">
-        <h3 className="font-semibold mb-4">Recent Eco Activities</h3>
-        {filteredActivities.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">
-            {searchQuery ? `No activities found matching "${searchQuery}"` : 'No activities yet'}
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {filteredActivities.map((activity) => (
-              <div key={activity.id} className="border-b border-border pb-4 last:border-b-0">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  <div className="flex-1">
-                    <h4 className="font-medium text-foreground">{activity.title}</h4>
-                    <p className="text-sm text-muted-foreground">{activity.school_name}</p>
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span>📅 {new Date(activity.date).toLocaleDateString()}</span>
-                      <span>👥 {activity.students_participated} students</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(activity.status)}`}>
-                      {activity.status}
-                    </span>
-                  </div>
+      {/* Recent Activities - Desktop Table View */}
+      <div className="hidden sm:block bg-card rounded-xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border">
+          <h3 className="font-semibold">Recent Eco Activities</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-3">Title</th>
+                <th className="text-left px-4 py-3">School</th>
+                <th className="text-left px-4 py-3">Date</th>
+                <th className="text-center px-4 py-3">Students</th>
+                <th className="text-center px-4 py-3">Status</th>
+                <th className="text-center px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredActivities.length > 0 ? (
+                filteredActivities.map((activity) => (
+                  <tr key={activity.id} className="border-t border-border hover:bg-muted/30">
+                    <td className="px-4 py-3 font-medium">{activity.title}</td>
+                    <td className="px-4 py-3">{activity.school_name}</td>
+                    <td className="px-4 py-3">{new Date(activity.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-center">{activity.students_participated}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(activity.status)}`}>
+                        {activity.status === 'pending' ? 'unverified' : activity.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex gap-1 justify-center flex-wrap">
+                        {canApprove && (
+                          <button onClick={() => updateActivityStatus(activity.id, 'approved')} disabled={actionLoading === activity.id} className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg" title="Approve">
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canVerify && (
+                          <button onClick={() => updateActivityStatus(activity.id, 'verified')} disabled={actionLoading === activity.id} className="p-1.5 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg" title="Verify">
+                            <ShieldCheck className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canReject && (
+                          <button onClick={() => updateActivityStatus(activity.id, 'rejected')} disabled={actionLoading === activity.id} className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg" title="Reject">
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canUnverify && activity.status !== 'pending' && (
+                          <button onClick={() => updateActivityStatus(activity.id, 'pending')} disabled={actionLoading === activity.id} className="p-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg" title="Unverify">
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button onClick={() => viewActivityDetails(activity)} className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg" title="View">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="text-center py-12">
+                    <p className="text-muted-foreground">No activities found</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Recent Activities - Mobile Card View */}
+      <div className="sm:hidden space-y-3">
+        <h3 className="font-semibold px-1">Recent Eco Activities</h3>
+        {filteredActivities.length > 0 ? (
+          filteredActivities.map((activity) => (
+            <Card key={activity.id} className="overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-semibold text-foreground flex-1">{activity.title}</h4>
+                  <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(activity.status)}`}>
+                    {activity.status === 'pending' ? 'unverified' : activity.status}
+                  </span>
                 </div>
-                
-                <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-border/50">
+                <p className="text-sm text-muted-foreground mb-2">{activity.school_name}</p>
+                <div className="flex gap-3 text-xs text-muted-foreground mb-3">
+                  <span>📅 {new Date(activity.date).toLocaleDateString()}</span>
+                  <span>👥 {activity.students_participated} students</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
                   {canApprove && (
-                    <button
-                      onClick={() => updateActivityStatus(activity.id, 'approved')}
-                      disabled={actionLoading === activity.id}
-                      className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1 disabled:opacity-50"
-                    >
-                      <CheckCircle className="w-3 h-3" />
-                      Approve
-                    </button>
+                    <Button size="sm" variant="outline" onClick={() => updateActivityStatus(activity.id, 'approved')} disabled={actionLoading === activity.id} className="bg-blue-50 text-blue-700 border-blue-200">
+                      <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                    </Button>
                   )}
-                  
                   {canVerify && (
-                    <button
-                      onClick={() => updateActivityStatus(activity.id, 'verified')}
-                      disabled={actionLoading === activity.id}
-                      className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1 disabled:opacity-50"
-                    >
-                      <ShieldCheck className="w-3 h-3" />
-                      Verify
-                    </button>
+                    <Button size="sm" variant="outline" onClick={() => updateActivityStatus(activity.id, 'verified')} disabled={actionLoading === activity.id} className="bg-green-50 text-green-700 border-green-200">
+                      <ShieldCheck className="w-3 h-3 mr-1" /> Verify
+                    </Button>
                   )}
-                  
                   {canReject && (
-                    <button
-                      onClick={() => updateActivityStatus(activity.id, 'rejected')}
-                      disabled={actionLoading === activity.id}
-                      className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors flex items-center gap-1 disabled:opacity-50"
-                    >
-                      <XCircle className="w-3 h-3" />
-                      Reject
-                    </button>
+                    <Button size="sm" variant="outline" onClick={() => updateActivityStatus(activity.id, 'rejected')} disabled={actionLoading === activity.id} className="bg-red-50 text-red-700 border-red-200">
+                      <XCircle className="w-3 h-3 mr-1" /> Reject
+                    </Button>
                   )}
-                  
-                  <button
-                    onClick={() => viewActivityDetails(activity)}
-                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1 ml-auto"
-                  >
-                    <Eye className="w-3 h-3" />
-                    View
-                  </button>
+                  {canUnverify && activity.status !== 'pending' && (
+                    <Button size="sm" variant="outline" onClick={() => updateActivityStatus(activity.id, 'pending')} disabled={actionLoading === activity.id} className="bg-orange-50 text-orange-700 border-orange-200">
+                      <RefreshCw className="w-3 h-3 mr-1" /> Unverify
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => viewActivityDetails(activity)} className="ml-auto">
+                    <Eye className="w-3 h-3 mr-1" /> View
+                  </Button>
                 </div>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center py-8 bg-muted/30 rounded-lg">
+            <p className="text-muted-foreground">No activities found</p>
           </div>
         )}
       </div>
@@ -334,10 +454,7 @@ const Index = ({ lang, searchQuery }: Props) => {
           <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Activity Details</h2>
-              <button 
-                onClick={() => setShowDetailsModal(false)}
-                className="p-1 hover:bg-gray-100 rounded text-gray-500"
-              >
+              <button onClick={() => setShowDetailsModal(false)} className="p-1 hover:bg-gray-100 rounded text-gray-500">
                 ✕
               </button>
             </div>
@@ -361,7 +478,13 @@ const Index = ({ lang, searchQuery }: Props) => {
                     selectedActivity.status === 'pending' ? 'text-yellow-600' :
                     'text-red-600'
                   }`}>
-                    {selectedActivity.status}
+                    {selectedActivity.status === 'pending' ? 'unverified' : selectedActivity.status}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedActivity.status === 'pending' && 'Awaiting BEO/DEO review - no points awarded yet'}
+                    {selectedActivity.status === 'approved' && 'Approved by BEO/DEO - points pending State verification'}
+                    {selectedActivity.status === 'verified' && 'Fully verified - points awarded to students'}
+                    {selectedActivity.status === 'rejected' && 'Rejected - school can revise and resubmit'}
                   </p>
                 </div>
               </div>
@@ -388,10 +511,7 @@ const Index = ({ lang, searchQuery }: Props) => {
               </div>
               
               <div className="pt-4 border-t">
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                >
+                <button onClick={() => setShowDetailsModal(false)} className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
                   Close
                 </button>
               </div>

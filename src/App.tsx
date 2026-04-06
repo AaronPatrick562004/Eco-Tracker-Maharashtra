@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ThemeProvider } from "@/components/ThemeProvider"; // Fixed: Changed from @/lib/theme-provider
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -32,7 +32,6 @@ import { Button } from "@/components/ui/button";
 const MobileSidebar = ({ lang, isOpen, onClose }: { lang: Language; isOpen: boolean; onClose: () => void }) => {
   return (
     <>
-      {/* Overlay */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -40,7 +39,6 @@ const MobileSidebar = ({ lang, isOpen, onClose }: { lang: Language; isOpen: bool
         />
       )}
 
-      {/* Sidebar */}
       <div className={`
         fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 z-50 transform transition-transform duration-300 lg:hidden
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -82,17 +80,13 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Mobile Sidebar */}
       <MobileSidebar lang={lang} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Desktop Sidebar - Hidden on mobile */}
       <div className="hidden lg:block fixed left-0 top-0 h-full">
         <AppSidebar lang={lang} />
       </div>
 
-      {/* Main Content */}
       <div className="lg:ml-64 min-h-screen flex flex-col">
-        {/* Top Bar with Mobile Menu Button */}
         <div className="sticky top-0 z-30">
           <TopBar
             lang={lang}
@@ -104,7 +98,6 @@ const AuthenticatedLayout = ({ children, lang, setLang, searchQuery, setSearchQu
           />
         </div>
 
-        {/* Page Content */}
         <main className="flex-1">
           {children}
         </main>
@@ -129,7 +122,9 @@ const AppContent = () => {
         <Navigate to={user ? "/dashboard" : "/login"} />
       } />
 
-      {/* Protected Routes - ALL USERS CAN ACCESS ALL PAGES */}
+      {/* Protected Routes - ALL WITH searchQuery PROP PASSED */}
+      
+      {/* Dashboard */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -138,6 +133,7 @@ const AppContent = () => {
         </ProtectedRoute>
       } />
 
+      {/* Profile */}
       <Route path="/profile" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
@@ -146,66 +142,74 @@ const AppContent = () => {
         </ProtectedRoute>
       } />
 
+      {/* School Portal - ✅ FIXED: Added searchQuery prop */}
       <Route path="/school-portal" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <SchoolPortal lang={lang} />
+            <SchoolPortal lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Activity Logger - ✅ FIXED: Added searchQuery prop */}
       <Route path="/activity-logger" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <ActivityLogger lang={lang} />
+            <ActivityLogger lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* BEO/DEO Monitor - ✅ FIXED: Added searchQuery prop */}
       <Route path="/monitor" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <BEODEOMonitor lang={lang} />
+            <BEODEOMonitor lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Recognition - ✅ FIXED: Added searchQuery prop */}
       <Route path="/recognition" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <Recognition lang={lang} />
+            <Recognition lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Eco-Passports - ✅ FIXED: Added searchQuery prop */}
       <Route path="/eco-passports" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <EcoPassports lang={lang} />
+            <EcoPassports lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Analytics - ✅ FIXED: Added searchQuery prop (optional but consistent) */}
       <Route path="/analytics" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <Analytics lang={lang} />
+            <Analytics lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Community - ✅ FIXED: Added searchQuery prop */}
       <Route path="/community" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <Community lang={lang} />
+            <Community lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />
 
+      {/* Government Resolutions - ✅ FIXED: Added searchQuery prop (THIS WAS THE ISSUE!) */}
       <Route path="/resolutions" element={
         <ProtectedRoute>
           <AuthenticatedLayout lang={lang} setLang={setLang} searchQuery={searchQuery} setSearchQuery={setSearchQuery}>
-            <GovernmentResolutions lang={lang} />
+            <GovernmentResolutions lang={lang} searchQuery={searchQuery} />
           </AuthenticatedLayout>
         </ProtectedRoute>
       } />

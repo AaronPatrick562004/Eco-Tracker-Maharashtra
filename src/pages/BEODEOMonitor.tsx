@@ -36,16 +36,16 @@ interface BlockStats {
 
 interface Props {
   lang: Language;
+  searchQuery?: string;
 }
 
-const BEODEOMonitor = ({ lang }: Props) => {
+const BEODEOMonitor = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user } = useAuth();
   
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedBlock, setSelectedBlock] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
   
@@ -65,11 +65,9 @@ const BEODEOMonitor = ({ lang }: Props) => {
   const canEdit = user?.role === 'state' || user?.role === 'deo' || user?.role === 'beo';
   const canEditAll = user?.role === 'state';
 
-  // CALCULATE BLOCK STATISTICS - Shows ALL blocks from database
   const blockStats = useMemo(() => {
     const stats: BlockStats[] = [];
     
-    // Create a map for ALL blocks from the blocks table
     const blockMap = new Map<string, {
       district: string;
       total: number;
@@ -77,7 +75,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
       atRisk: number;
     }>();
     
-    // First, add ALL blocks from the blocks table
     blocks.forEach(block => {
       blockMap.set(block.name, {
         district: block.district,
@@ -87,7 +84,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
       });
     });
     
-    // Then, count schools for each block
     schools.forEach(school => {
       const blockData = blockMap.get(school.block);
       if (blockData) {
@@ -99,7 +95,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
           blockData.atRisk++;
         }
       } else {
-        // If a school's block doesn't exist in blocks table, add it
         blockMap.set(school.block, {
           district: school.district,
           total: 1,
@@ -109,7 +104,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
       }
     });
     
-    // Convert to array and calculate completion rate
     blockMap.forEach((data, blockName) => {
       const completionRate = data.total > 0 ? (data.compliant / data.total) * 100 : 0;
       
@@ -155,8 +149,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
     try {
       setLoading(true);
       
-      // Fetch ALL blocks - NO ROLE FILTERING to get all blocks
-      // This ensures we get ALL blocks from the database
       const { data: blocksData, error: blocksError } = await supabase
         .from('blocks')
         .select('id, name, district')
@@ -165,7 +157,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
       
       if (blocksError) throw blocksError;
       
-      // Fetch schools with role-based filtering
       let schoolsQuery = supabase.from('schools').select('*');
       
       if (user?.role === 'beo' && user?.block) {
@@ -177,14 +168,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
       const { data: schoolsData, error: schoolsError } = await schoolsQuery.order('name');
       
       if (schoolsError) throw schoolsError;
-      
-      console.log("📊 Total blocks in database:", blocksData?.length);
-      console.log("📊 Blocks:", blocksData?.map(b => b.name));
-      console.log("🏫 Total schools:", schoolsData?.length);
-      console.log("🏫 Schools by block:", schoolsData?.reduce((acc, s) => {
-        acc[s.block] = (acc[s.block] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>));
       
       setBlocks(blocksData || []);
       setSchools(schoolsData || []);
@@ -298,9 +281,12 @@ const BEODEOMonitor = ({ lang }: Props) => {
     }
   };
 
+  // Filter schools using searchQuery from TopBar
   const filteredSchools = schools.filter(school => {
-    const matchesSearch = school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         school.udise.includes(searchQuery);
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = school.name.toLowerCase().includes(query) ||
+                         school.udise.includes(query);
     const matchesBlock = selectedBlock === 'all' || school.block === selectedBlock;
     return matchesSearch && matchesBlock;
   });
@@ -323,6 +309,11 @@ const BEODEOMonitor = ({ lang }: Props) => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">BEO/DEO Monitor</h1>
         <p className="text-muted-foreground mt-1">Monitor school compliance and activities</p>
+        {searchQuery && (
+          <p className="text-sm text-muted-foreground mt-1">
+            🔍 Showing results for: "{searchQuery}"
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -392,7 +383,6 @@ const BEODEOMonitor = ({ lang }: Props) => {
         </CardContent>
       </Card>
 
-      {/* Blocks Overview - Shows ALL blocks from database */}
       {blockStats.length > 0 && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
@@ -453,21 +443,14 @@ const BEODEOMonitor = ({ lang }: Props) => {
         </div>
       )}
 
-      {/* Schools List */}
+      {/* Schools List - REMOVED the search input box */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Schools List</h2>
-        
-        <div className="flex gap-3">
-          <Input
-            placeholder="Search by school name or UDISE..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1"
-          />
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Schools List</h2>
           <select
             value={selectedBlock}
             onChange={(e) => setSelectedBlock(e.target.value)}
-            className="px-3 py-2 border rounded-lg bg-card"
+            className="px-3 py-2 border rounded-lg bg-card text-sm"
           >
             <option value="all">All Blocks</option>
             {blockStats.map(block => (
@@ -487,7 +470,7 @@ const BEODEOMonitor = ({ lang }: Props) => {
                   <th className="text-center px-4 py-3">Students</th>
                   <th className="text-center px-4 py-3">Compliance</th>
                   <th className="text-center px-4 py-3">Actions</th>
-                </tr>
+                 </tr>
               </thead>
               <tbody>
                 {filteredSchools.length > 0 ? (
@@ -529,7 +512,9 @@ const BEODEOMonitor = ({ lang }: Props) => {
                   <tr>
                     <td colSpan={6} className="text-center py-12">
                       <School className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-foreground">No schools found</p>
+                      <p className="text-foreground">
+                        {searchQuery ? `No schools found for "${searchQuery}"` : 'No schools found'}
+                      </p>
                     </td>
                   </tr>
                 )}

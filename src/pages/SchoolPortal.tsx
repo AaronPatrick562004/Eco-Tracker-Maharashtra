@@ -55,7 +55,7 @@ const complianceConfig = {
 
 interface Props {
   lang: Language;
-  searchQuery?: string; // ✅ Add searchQuery prop
+  searchQuery?: string;
 }
 
 const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
@@ -65,7 +65,6 @@ const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // ❌ REMOVED local searchQuery state - using prop instead
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [showMobileDetail, setShowMobileDetail] = useState(false);
   
@@ -307,7 +306,6 @@ const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
     return <Icon className={`w-4 h-4 ${config.color}`} />;
   };
 
-  // ✅ Filter schools using searchQuery from TopBar
   const filteredSchools = schools.filter(school => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -539,8 +537,6 @@ const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
         </Card>
       </div>
 
-      {/* ❌ REMOVED PAGE SEARCH BOX */}
-
       {/* Schools Table */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
@@ -554,7 +550,7 @@ const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
                 <th className="text-center px-4 py-3">Status</th>
                 <th className="text-center px-4 py-3">Eco</th>
                 <th className="text-center px-4 py-3">Actions</th>
-               </tr>
+              </tr>
               </thead>
               <tbody>
                 {filteredSchools.map((school) => (
@@ -711,19 +707,298 @@ const SchoolPortal = ({ lang, searchQuery = "" }: Props) => {
         </div>
       )}
 
-      {/* Add School Modal - same */}
+      {/* Add School Modal */}
       {showAddModal && (
-        // ... keep existing modal code (unchanged)
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          {/* Modal content - keep as is */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-foreground">Add New School</h3>
+              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-foreground">School Name *</label>
+                <Input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  placeholder="e.g., ZP School, Shirdi"
+                  className="w-full bg-white dark:bg-gray-800 text-foreground"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">UDISE Code *</label>
+                  <Input
+                    name="udise"
+                    value={formData.udise}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 27240100101"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">District *</label>
+                  <Input
+                    name="district"
+                    value={formData.district}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Pune"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Block *</label>
+                  <Input
+                    name="block"
+                    value={formData.block}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Haveli"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Students Count</label>
+                  <Input
+                    type="number"
+                    name="students_count"
+                    value={formData.students_count}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 500"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Name</label>
+                  <Input
+                    name="coordinator_name"
+                    value={formData.coordinator_name}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Mr. Patil S.R."
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Phone</label>
+                  <Input
+                    name="coordinator_phone"
+                    value={formData.coordinator_phone}
+                    onChange={handleInputChange}
+                    placeholder="e.g., +91 98765 43210"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Email</label>
+                  <Input
+                    name="coordinator_email"
+                    value={formData.coordinator_email}
+                    onChange={handleInputChange}
+                    placeholder="e.g., school@edu.mh.in"
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Status</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-foreground"
+                  >
+                    <option value="active">✅ Active</option>
+                    <option value="pending">⏳ Pending</option>
+                    <option value="inactive">❌ Inactive</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1 text-foreground">Compliance</label>
+                <select
+                  name="compliance"
+                  value={formData.compliance}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-foreground"
+                >
+                  <option value="green">🟢 Green (Compliant)</option>
+                  <option value="amber">🟡 Amber (Partial)</option>
+                  <option value="red">🔴 Red (At Risk)</option>
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Green: All activities completed • Amber: Some activities pending • Red: Urgent attention needed
+                </p>
+              </div>
+            </div>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
+              <Button onClick={handleAddSchool} disabled={submitting} className="bg-green-600 hover:bg-green-700 text-white">
+                {submitting ? 'Adding...' : 'Add School'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Edit School Modal - same */}
+      {/* Edit School Modal */}
       {showEditModal && editingSchool && (
-        // ... keep existing modal code (unchanged)
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          {/* Modal content - keep as is */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-foreground">Edit School</h3>
+              <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-foreground">School Name *</label>
+                <Input
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  className="w-full bg-white dark:bg-gray-800 text-foreground"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">UDISE Code *</label>
+                  <Input
+                    name="udise"
+                    value={formData.udise}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">District *</label>
+                  <Input
+                    name="district"
+                    value={formData.district}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Block *</label>
+                  <Input
+                    name="block"
+                    value={formData.block}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Students Count</label>
+                  <Input
+                    type="number"
+                    name="students_count"
+                    value={formData.students_count}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Name</label>
+                  <Input
+                    name="coordinator_name"
+                    value={formData.coordinator_name}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Phone</label>
+                  <Input
+                    name="coordinator_phone"
+                    value={formData.coordinator_phone}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Coordinator Email</label>
+                  <Input
+                    name="coordinator_email"
+                    value={formData.coordinator_email}
+                    onChange={handleInputChange}
+                    className="w-full bg-white dark:bg-gray-800 text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 text-foreground">Status</label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-foreground"
+                  >
+                    <option value="active">✅ Active</option>
+                    <option value="pending">⏳ Pending</option>
+                    <option value="inactive">❌ Inactive</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1 text-foreground">Compliance</label>
+                <select
+                  name="compliance"
+                  value={formData.compliance}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-lg bg-white dark:bg-gray-800 text-foreground"
+                >
+                  <option value="green">🟢 Green (Compliant)</option>
+                  <option value="amber">🟡 Amber (Partial)</option>
+                  <option value="red">🔴 Red (At Risk)</option>
+                </select>
+              </div>
+            </div>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
+              <Button onClick={handleUpdateSchool} disabled={submitting} className="bg-green-600 hover:bg-green-700 text-white">
+                {submitting ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

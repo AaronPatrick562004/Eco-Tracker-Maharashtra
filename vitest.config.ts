@@ -13,4 +13,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },
+  build: {
+    outDir: "out", // This creates the 'out' folder instead of 'dist'
+    emptyOutDir: true, // Cleans the folder before each build
+  },
 });

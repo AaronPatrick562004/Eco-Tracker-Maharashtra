@@ -1,3 +1,4 @@
+// src/pages/Profile.tsx
 import { useState, useEffect } from "react";
 import { 
   User, Mail, Calendar, MapPin, Phone, Award, School, Shield, Edit, Save, X, Camera, CheckCircle, AlertCircle
@@ -14,15 +15,14 @@ import { cn } from "@/lib/utils";
 import { translations, Language } from "@/lib/translations";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth-context";
-import { usersAPI } from "@/lib/supabaseAPI"; // ✅ Updated import
-
-// ALL YOUR EXISTING CODE STAYS THE SAME
+import { usersAPI } from "@/lib/supabaseAPI";
 
 interface ProfileProps {
   lang: Language;
+  searchQuery?: string; // ✅ Added searchQuery prop
 }
 
-const Profile = ({ lang }: ProfileProps) => {
+const Profile = ({ lang, searchQuery = "" }: ProfileProps) => {
   const t = translations[lang];
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -76,6 +76,11 @@ const Profile = ({ lang }: ProfileProps) => {
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
             {lang === "en" ? "Manage your account information" : "तुमची खाते माहिती व्यवस्थापित करा"}
           </p>
+          {searchQuery && (
+            <p className="text-xs text-muted-foreground mt-1">
+              🔍 Current search: "{searchQuery}" (Profile page doesn't support search filtering)
+            </p>
+          )}
         </div>
         {!isEditing ? (
           <Button onClick={() => setIsEditing(true)} className="gap-2">

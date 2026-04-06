@@ -28,9 +28,10 @@ interface Recognition {
 
 interface Props {
   lang: Language;
+  searchQuery?: string;
 }
 
-const Recognition = ({ lang }: Props) => {
+const Recognition = ({ lang, searchQuery = "" }: Props) => {
   const t = translations[lang];
   const { user, hasPermission } = useAuth();
   
@@ -40,7 +41,6 @@ const Recognition = ({ lang }: Props) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // ✅ Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const today = new Date();
     const year = today.getFullYear();
@@ -62,7 +62,6 @@ const Recognition = ({ lang }: Props) => {
     category: 'green'
   });
 
-  // ✅ FIX: Direct role-based permissions for recognition
   const canCreate = user?.role === 'state' || 
                     user?.role === 'deo' || 
                     user?.role === 'beo' ||
@@ -97,7 +96,6 @@ const Recognition = ({ lang }: Props) => {
       setLoading(true);
       let query = supabase.from('recognitions').select('*');
       
-      // ✅ Role-based filtering
       if (user?.role === 'principal' && user?.school) {
         query = query.eq('school', user.school);
       } else if (user?.role === 'beo' && user?.block) {
@@ -105,7 +103,6 @@ const Recognition = ({ lang }: Props) => {
       } else if (user?.role === 'deo' && user?.district) {
         query = query.eq('district', user.district);
       }
-      // State sees all (no filter)
       
       const { data, error } = await query.order('date', { ascending: false });
       if (error) throw error;
@@ -118,15 +115,12 @@ const Recognition = ({ lang }: Props) => {
     }
   };
 
-  // ✅ Handle date change
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedDate = e.target.value;
     setFormData(prev => ({ ...prev, date: selectedDate }));
   };
 
-  // ✅ Open form with pre-filled data based on user role
   const openCreateForm = () => {
-    // Reset form first
     setFormData({
       title: '', 
       description: '', 
@@ -140,7 +134,6 @@ const Recognition = ({ lang }: Props) => {
       category: 'green'
     });
     
-    // Pre-fill based on user role
     if (user?.role === 'principal' && user?.school) {
       setFormData(prev => ({
         ...prev,
@@ -169,21 +162,17 @@ const Recognition = ({ lang }: Props) => {
     setError(null);
     
     try {
-      // Validate required fields
       if (!formData.title.trim()) throw new Error('Title is required');
       if (!formData.recipient.trim()) throw new Error('Recipient name is required');
       
-      // ✅ Prevent DEO from creating for other districts
       if (user?.role === 'deo' && formData.district !== user.district) {
         throw new Error(`You can only create recognitions for ${user.district} district`);
       }
       
-      // ✅ Prevent BEO from creating for other blocks
       if (user?.role === 'beo' && formData.block !== user.block) {
         throw new Error(`You can only create recognitions for ${user.block} block`);
       }
       
-      // ✅ Prevent Principal from creating for other schools
       if (user?.role === 'principal' && formData.school !== user.school) {
         throw new Error(`You can only create recognitions for ${user.school}`);
       }
@@ -215,19 +204,16 @@ const Recognition = ({ lang }: Props) => {
   };
 
   const handleDelete = async (id: string, recognition: Recognition) => {
-    // ✅ Prevent DEO from deleting other districts
     if (user?.role === 'deo' && recognition.district !== user.district) {
       alert('❌ You can only delete recognitions from your own district!');
       return;
     }
     
-    // ✅ Prevent BEO from deleting other blocks
     if (user?.role === 'beo' && recognition.block !== user.block) {
       alert('❌ You can only delete recognitions from your own block!');
       return;
     }
     
-    // ✅ Prevent Principal from deleting other schools
     if (user?.role === 'principal' && recognition.school !== user.school) {
       alert('❌ You can only delete recognitions from your own school!');
       return;
@@ -303,6 +289,16 @@ const Recognition = ({ lang }: Props) => {
     }
   };
 
+  // Filter recognitions using searchQuery
+  const filteredRecognitions = recognitions.filter(rec => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return rec.title.toLowerCase().includes(query) ||
+           rec.recipient.toLowerCase().includes(query) ||
+           rec.school.toLowerCase().includes(query) ||
+           rec.description?.toLowerCase().includes(query);
+  });
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -318,6 +314,11 @@ const Recognition = ({ lang }: Props) => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Recognition & Awards</h1>
           <p className="text-muted-foreground mt-1">Celebrating excellence in environmental education</p>
+          {searchQuery && (
+            <p className="text-sm text-muted-foreground mt-1">
+              🔍 Showing results for: "{searchQuery}"
+            </p>
+          )}
         </div>
         {canCreate && (
           <Button 
@@ -407,7 +408,6 @@ const Recognition = ({ lang }: Props) => {
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                     School
                   </label>
-                  {/* ✅ Make School field read-only for Principal (auto-filled) */}
                   {user?.role === 'principal' ? (
                     <Input
                       value={user?.school || formData.school}
@@ -433,7 +433,6 @@ const Recognition = ({ lang }: Props) => {
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                     District
                   </label>
-                  {/* ✅ Make District field read-only for BEO and Principal */}
                   {(user?.role === 'beo' || user?.role === 'principal') ? (
                     <Input
                       value={user?.district || formData.district}
@@ -459,7 +458,6 @@ const Recognition = ({ lang }: Props) => {
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
                     Block
                   </label>
-                  {/* ✅ Make Block field read-only for BEO and Principal */}
                   {(user?.role === 'beo' || user?.role === 'principal') ? (
                     <Input
                       value={user?.block || formData.block}
@@ -483,7 +481,7 @@ const Recognition = ({ lang }: Props) => {
                 </div>
               </div>
 
-              {/* Date, Type, Category - FIXED Date Picker */}
+              {/* Date, Type, Category */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
@@ -551,88 +549,89 @@ const Recognition = ({ lang }: Props) => {
         </div>
       )}
 
-      {/* Recognitions Grid */}
+      {/* Recognitions Grid - Using filteredRecognitions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {recognitions.map(rec => (
-          <Card key={rec.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex justify-between items-start mb-2">
-                <Badge className={getCategoryColor(rec.category)}>
-                  {getCategoryIcon(rec.category)} {rec.category}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(rec.date).toLocaleDateString()}
-                </span>
-              </div>
-              <h3 className="font-semibold text-foreground mt-2">{rec.title}</h3>
-              <p className="text-sm text-muted-foreground line-clamp-2 my-2">{rec.description}</p>
-              <div className="flex items-center gap-3 my-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {rec.type === 'school' ? '🏫' : rec.type === 'teacher' ? '👨‍🏫' : '👩‍🎓'}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{rec.recipient}</p>
-                  <p className="text-xs text-muted-foreground">{rec.recipient_role}</p>
+        {filteredRecognitions.length > 0 ? (
+          filteredRecognitions.map(rec => (
+            <Card key={rec.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <Badge className={getCategoryColor(rec.category)}>
+                    {getCategoryIcon(rec.category)} {rec.category}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(rec.date).toLocaleDateString()}
+                  </span>
                 </div>
-              </div>
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> {rec.district}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Heart className="w-3 h-3" /> {rec.likes}
-                </span>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  onClick={() => handleLike(rec.id, rec.likes)}
-                >
-                  <Heart className="w-4 h-4 mr-1" /> Like
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  onClick={() => handleShare(rec)}
-                >
-                  <Share2 className="w-4 h-4 mr-1" /> Share
-                </Button>
-                {canDelete && (
+                <h3 className="font-semibold text-foreground mt-2">{rec.title}</h3>
+                <p className="text-sm text-muted-foreground line-clamp-2 my-2">{rec.description}</p>
+                <div className="flex items-center gap-3 my-3">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {rec.type === 'school' ? '🏫' : rec.type === 'teacher' ? '👨‍🏫' : '👩‍🎓'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{rec.recipient}</p>
+                    <p className="text-xs text-muted-foreground">{rec.recipient_role}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" /> {rec.district}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3 h-3" /> {rec.likes}
+                  </span>
+                </div>
+                <div className="flex gap-2 mt-4">
                   <Button 
-                    variant="destructive" 
+                    variant="outline" 
                     size="sm" 
-                    onClick={() => handleDelete(rec.id, rec)}
+                    className="flex-1"
+                    onClick={() => handleLike(rec.id, rec.likes)}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Heart className="w-4 h-4 mr-1" /> Like
                   </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleShare(rec)}
+                  >
+                    <Share2 className="w-4 h-4 mr-1" /> Share
+                  </Button>
+                  {canDelete && (
+                    <Button 
+                      variant="destructive" 
+                      size="sm" 
+                      onClick={() => handleDelete(rec.id, rec)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center py-12 bg-muted/30 rounded-lg col-span-full">
+            <Award className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-foreground font-medium">
+              {searchQuery ? `No recognitions found for "${searchQuery}"` : "No recognitions yet"}
+            </p>
+            {canCreate && !searchQuery && (
+              <Button 
+                onClick={openCreateForm} 
+                className="mt-4 bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First Recognition
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Empty State */}
-      {recognitions.length === 0 && (
-        <div className="text-center py-12 bg-muted/30 rounded-lg">
-          <Award className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-foreground font-medium">No recognitions yet</p>
-          {canCreate && (
-            <Button 
-              onClick={openCreateForm} 
-              className="mt-4 bg-green-600 hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Your First Recognition
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

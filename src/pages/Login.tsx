@@ -52,7 +52,7 @@ const Login = () => {
               <Leaf className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
           </div>
-          <CardTitle className="text-2xl">EcoTrack Maharashtra</CardTitle>
+          <CardTitle className="text-2xl">Eco Track Maharashtra</CardTitle>
           <p className="text-sm text-muted-foreground mt-2">Login to access your dashboard</p>
         </CardHeader>
         

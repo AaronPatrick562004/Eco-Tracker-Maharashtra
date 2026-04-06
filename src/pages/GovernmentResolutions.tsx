@@ -293,16 +293,48 @@ Date: ${new Date().toLocaleString()}
     setBookmarked(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
   };
 
-  const filteredResolutions = resolutions.filter(res => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = res.title.toLowerCase().includes(query) ||
-                         res.number.toLowerCase().includes(query) ||
-                         res.description?.toLowerCase().includes(query) ||
-                         res.department?.toLowerCase().includes(query);
-    const matchesCategory = selectedCategory === "All" || res.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Filter and sort resolutions by relevance
+  const getFilteredAndSortedResolutions = () => {
+    let filtered = resolutions.filter(res => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = res.title.toLowerCase().includes(query) ||
+                           res.number.toLowerCase().includes(query) ||
+                           res.description?.toLowerCase().includes(query) ||
+                           res.department?.toLowerCase().includes(query);
+      const matchesCategory = selectedCategory === "All" || res.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.sort((a, b) => {
+        const getScore = (res: Resolution) => {
+          let score = 0;
+          if (res.title.toLowerCase() === query) score += 100;
+          if (res.title.toLowerCase().includes(query)) score += 50;
+          if (res.number.toLowerCase().includes(query)) score += 40;
+          if (res.description?.toLowerCase().includes(query)) score += 20;
+          if (res.department?.toLowerCase().includes(query)) score += 10;
+          if (res.tags?.some(tag => tag.toLowerCase().includes(query))) score += 15;
+          return score;
+        };
+        
+        const scoreA = getScore(a);
+        const scoreB = getScore(b);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+    } else {
+      filtered = filtered.sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }
+    
+    return filtered;
+  };
+
+  const filteredResolutions = getFilteredAndSortedResolutions();
 
   if (loading) {
     return (
@@ -320,9 +352,16 @@ Date: ${new Date().toLocaleString()}
           <h1 className="text-2xl font-bold text-foreground">Government Resolutions</h1>
           <p className="text-muted-foreground mt-1">Official circulars and guidelines for schools</p>
           {searchQuery && (
-            <p className="text-sm text-muted-foreground mt-1">
-              🔍 Showing results for: "{searchQuery}"
-            </p>
+            <div className="mt-2">
+              <p className="text-sm text-muted-foreground">
+                🔍 Found <span className="font-semibold text-green-600">{filteredResolutions.length}</span> result(s) for "<span className="font-semibold">{searchQuery}</span>"
+              </p>
+              {filteredResolutions.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  ✨ Results are sorted by relevance (exact title matches appear first)
+                </p>
+              )}
+            </div>
           )}
         </div>
         {canCreate && (
